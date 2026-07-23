@@ -1,0 +1,212 @@
+@import "tailwindcss";
+
+@theme {
+  /* ---- Color tokens: warm cream / chocolate / caramel, uplifting by default ---- */
+  --color-bg: #f7eee1;
+  --color-surface: #ffffff;
+  --color-surface-raised: #fbf3e7;
+  --color-line: #ecdfcb;
+  --color-ink: #4a3327;
+  --color-ink-dim: #8c7360;
+  --color-ink-faint: #c4af9a;
+  --color-ember: #6b4530;
+  --color-ember-dim: #ad8262;
+  --color-ember-soft: #f1e2cd;
+  --color-gold: #d9a876;
+  --color-good: #7fa87c;
+  --color-bad: #cb7a63;
+
+  /* ---- Elevation scale: pressed-cardstock material metaphor ----
+     Surfaces read as thick paper stacked on a warm desk under a soft
+     upper-left light source — not glass, not flat fills. Each level
+     is a real, distinct shadow recipe, not one value reused everywhere. */
+  --shadow-flush: 0 1px 2px -1px rgba(74, 51, 39, 0.08);
+  --shadow-raised: 0 1px 2px rgba(74, 51, 39, 0.06), 0 8px 20px -8px rgba(74, 51, 39, 0.16);
+  --shadow-floating: 0 2px 4px rgba(74, 51, 39, 0.08), 0 16px 32px -12px rgba(74, 51, 39, 0.24);
+  --shadow-modal: 0 4px 8px rgba(74, 51, 39, 0.1), 0 28px 56px -16px rgba(74, 51, 39, 0.34);
+  /* Debossed / letterpress-pressed feel for active states — light carved in, not cast */
+  --shadow-pressed: inset 0 1px 3px rgba(74, 51, 39, 0.16), inset 0 0 0 1px rgba(74, 51, 39, 0.05);
+
+  --font-display: "Fraunces", "Nunito Sans", serif;
+  --font-body: "Nunito Sans", sans-serif;
+  --font-mono: "DM Mono", monospace;
+}
+
+/*
+  Dusk override. `@theme` above defines the warm light-mode values (also the
+  default) as real CSS custom properties on :root. This rule re-declares the
+  same variable names, scoped to :root[data-theme="dark"], so every existing
+  `var(--color-*)` usage across the app repaints automatically — no component
+  needs to know which theme is active. Kept soft and warm, not severe.
+*/
+:root[data-theme="dark"] {
+  --color-bg: #2a2117;
+  --color-surface: #362b1f;
+  --color-surface-raised: #40331f;
+  --color-line: #4a3c2c;
+  --color-ink: #f1e6d8;
+  --color-ink-dim: #bda98f;
+  --color-ink-faint: #7c6a54;
+  --color-ember: #e0b285;
+  --color-ember-dim: #a9835f;
+  --color-ember-soft: #4a3c2c;
+  --color-gold: #e0b285;
+  --color-good: #9bc498;
+  --color-bad: #e0a08c;
+
+  --shadow-flush: 0 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 20px -8px rgba(0, 0, 0, 0.45);
+  --shadow-floating: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 16px 36px -12px rgba(0, 0, 0, 0.55);
+  --shadow-modal: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 28px 64px -16px rgba(0, 0, 0, 0.65);
+  --shadow-pressed: inset 0 1px 4px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--color-bg);
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::-webkit-scrollbar { width: 0px; height: 0px; }
+
+.font-display { font-family: var(--font-display); }
+.font-mono { font-family: var(--font-mono); }
+
+/* Dial / gauge signature element */
+.gauge-tick {
+  stroke: var(--color-line);
+}
+.gauge-tick-active {
+  stroke: var(--color-ember);
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise {
+  animation: rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise { animation: none; }
+}
+
+/* focus visibility */
+:focus-visible {
+  outline: 2px solid var(--color-ember);
+  outline-offset: 2px;
+}
+
+/* ---- Signature element: the colored spine tab ----
+   Category color reads as a physical file-folder tab on the card's
+   left edge — not a tint wash. Pass --spine-color inline per instance. */
+.spine-card {
+  position: relative;
+  border-left: 3px solid var(--spine-color, transparent);
+}
+.spine-card::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  background: var(--spine-color, transparent);
+  border-radius: 0 3px 3px 0;
+  box-shadow: 1px 0 0 rgba(74, 51, 39, 0.06);
+}
+
+/* ---- Paper grain: a barely-there texture so surfaces don't read as flat digital fills ---- */
+.paper-grain {
+  position: relative;
+  isolation: isolate;
+}
+.paper-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.02 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-theme="dark"] .paper-grain::after {
+  mix-blend-mode: overlay;
+  opacity: 0.35;
+}
+
+/* ---- Tactile press: elements have weight, not just a color swap on interaction ---- */
+.tactile {
+  transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.16s ease;
+}
+.tactile:hover {
+  transform: translateY(-1px);
+}
+.tactile:active {
+  transform: translateY(0.5px) scale(0.985);
+  box-shadow: var(--shadow-pressed) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tactile, .tactile:hover, .tactile:active {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* ---- Task-complete / celebration feedback ---- */
+@keyframes confetti-pop {
+  0% { transform: translate(-50%, -50%) translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) translate(var(--dx), var(--dy)) scale(0.35); opacity: 0; }
+}
+.confetti-particle {
+  position: fixed;
+  pointer-events: none;
+  animation: confetti-pop 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes pop-bounce {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.22); }
+  60% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+.animate-pop {
+  animation: pop-bounce 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes check-draw {
+  from { stroke-dashoffset: 24; }
+  to { stroke-dashoffset: 0; }
+}
+.animate-check-draw {
+  stroke-dasharray: 24;
+  animation: check-draw 0.3s ease-out forwards;
+}
+
+@keyframes fade-scale-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-fade-scale-in {
+  animation: fade-scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti-particle, .animate-pop, .animate-check-draw, .animate-fade-scale-in {
+    animation: none !important;
+  }
+}
