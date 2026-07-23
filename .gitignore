@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+# Real secrets — never commit. Only .env.example (placeholders) should be tracked.
+.env
+.env.local
+.env.*.local
+
+# Vercel CLI local state
+.vercel
+
+# Editor/OS noise
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
