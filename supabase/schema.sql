@@ -33,7 +33,6 @@ create policy "update_own_profile"
 
 -- No delete policy on purpose — deleting the auth.users row cascades and
 -- removes the profile row automatically; nothing else should be able to.
-<<<<<<< HEAD
 
 -- ---- Streak reminders (push notifications) ----
 -- One row per subscribed browser. The cron job (api/send-streak-reminders.ts)
@@ -77,5 +76,3 @@ drop policy if exists "delete_own_subscription" on public.push_subscriptions;
 create policy "delete_own_subscription"
   on public.push_subscriptions for delete
   using (auth.uid() = user_id);
-=======
->>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc

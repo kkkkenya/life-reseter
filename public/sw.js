@@ -37,7 +37,6 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
-<<<<<<< HEAD
 
 // ---- Streak reminder pushes ----
 self.addEventListener("push", (event) => {
@@ -71,5 +70,3 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
-=======
->>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc

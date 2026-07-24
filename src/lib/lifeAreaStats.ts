@@ -135,7 +135,6 @@ export function goalFillRate(profile: UserProfile): Record<LifeAreaKey, number> 
 /**
  * Behavior-derived stats — replaces the old quiz-personality guesses. These move
  * only as real tasks get completed, so they reflect what you've actually done.
-<<<<<<< HEAD
  * Floor isn't 0 so a brand-new profile still shows a visible (small) pentagon
  * rather than a single point, but the range is wide enough that real progress
  * reads as a dramatic shape change rather than a subtle wobble.
@@ -143,12 +142,6 @@ export function goalFillRate(profile: UserProfile): Record<LifeAreaKey, number> 
 export function computeBehaviorStats(profile: UserProfile): Record<StatKey, number> {
   const c = lifeAreaCompletion(profile);
   const toStat = (pct: number) => Math.round(5 + pct * 90);
-=======
- */
-export function computeBehaviorStats(profile: UserProfile): Record<StatKey, number> {
-  const c = lifeAreaCompletion(profile);
-  const toStat = (pct: number) => Math.round(40 + pct * 40);
->>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
   return {
     strength: toStat(c.health.pct),
     wisdom: toStat(c.learning.pct),

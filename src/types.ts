@@ -352,10 +352,7 @@ export interface UserProfile {
   mitByDay: Record<number, MitEntry>; // program day -> MIT
   weeklyFocus: Record<string, string>; // ISO week key -> focus text
   eveningPlanned: Record<string, boolean>; // ISO date (the evening it was shown) -> ritual completed/dismissed
-<<<<<<< HEAD
   dayCompleteShown: Record<string, boolean>; // ISO date -> "day complete" popup already shown for that date
-=======
->>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
   skipReasons: Record<string, string>; // "day-uid" -> reason
   dailyGospel: Record<string, DailyGospelEntry>; // ISO date -> verse+reflection
   dailyReview: Record<string, string>; // ISO date -> Gemini review text

@@ -146,7 +146,6 @@ can't be reached") instead of back in the app, check these in order:
 4. **Dev server must actually be running** when you click the link, if testing against
    `localhost`.
 
-<<<<<<< HEAD
 ## Streak reminders — push notifications (optional)
 
 A "Don't lose your streak" push notification, sent only if today's tasks are still open by
@@ -210,8 +209,6 @@ the browser asks. Two real-world caveats:
   (Share → Add to Home Screen), not to a regular Safari tab, as of iOS 16.4+. Desktop and
   Android Chrome/Firefox/Edge work in a normal browser tab, no install needed.
 
-=======
->>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
 ## What's inside
 
 - **Setup** — pick your tasks and a start date. That's it. No quiz, no vow, no fake science.

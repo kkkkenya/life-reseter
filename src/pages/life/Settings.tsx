@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import { useEffect, useState } from "react";
 import { Plus, Trash2, ChevronUp, ChevronDown, Bell, BellOff } from "lucide-react";
 import { Card, Switch, PrimaryButton, GhostButton } from "@/components/ui";
@@ -13,19 +12,11 @@ import {
   updateReminderHour,
   unsubscribeFromStreakReminders,
 } from "@/lib/pushNotifications";
-=======
-import { useState } from "react";
-import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react";
-import { Card, Switch, PrimaryButton, GhostButton } from "@/components/ui";
-import { IconFor } from "@/components/IconFor";
-import { useAppStore } from "@/store/useAppStore";
->>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
 import { DEFAULT_QUEST_PILLARS, PILLAR_COLOR_PRESETS, PILLAR_ICON_PRESETS, randomPillarKey } from "@/data/questPillars";
 import { LIFE_AREAS } from "@/data/lifeAreas";
 import { COACH_TONES } from "@/data/coachTones";
 import type { QuestPillar } from "@/types";
 
-<<<<<<< HEAD
 const REMINDER_HOURS = [
   { hour: 12, label: "12pm" },
   { hour: 17, label: "5pm" },
@@ -124,8 +115,6 @@ function StreakReminders() {
   );
 }
 
-=======
->>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
 function PillarEditor({
   pillar,
   index,
@@ -307,11 +296,8 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-<<<<<<< HEAD
       <StreakReminders />
 
-=======
->>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
           About you
