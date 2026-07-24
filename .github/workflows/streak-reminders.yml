@@ -1,0 +1,19 @@
+name: Streak reminders
+
+# Vercel's own Cron Jobs feature is limited to once-per-day on the free Hobby
+# plan, which can't hit each subscriber's own local reminder hour across
+# different timezones. This workflow calls the check every hour instead —
+# free on GitHub for both public and private repos at this frequency.
+on:
+  schedule:
+    - cron: "0 * * * *" # every hour, on the hour, UTC
+  workflow_dispatch: {} # lets you run it manually from the Actions tab to test
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the reminder endpoint
+        run: |
+          curl --fail-with-body -sS -X GET "https://${{ vars.APP_DOMAIN }}/api/send-streak-reminders" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
