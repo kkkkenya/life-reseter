@@ -18,8 +18,11 @@ import { CalendarGrid } from "@/pages/today/CalendarGrid";
 import { QuestBoard } from "@/pages/today/QuestBoard";
 import { DailyReviewCard } from "@/pages/today/DailyReviewCard";
 import { EveningPlanningCard } from "@/pages/today/EveningPlanningCard";
+<<<<<<< HEAD
 import { DayCompleteModal } from "@/components/DayCompleteModal";
 import { dayCompletionInfo, computeDayStreak } from "@/lib/dayCompletion";
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
 import type { TimeOfDay, RecurrenceRule, TaskPriority, TaskDefinition } from "@/types";
 
 export default function Today({
@@ -44,7 +47,10 @@ export default function Today({
   const removeTimeBlock = useAppStore((s) => s.removeTimeBlock);
   const toggleTimeBlockDone = useAppStore((s) => s.toggleTimeBlockDone);
   const moveTimeBlock = useAppStore((s) => s.moveTimeBlock);
+<<<<<<< HEAD
   const markDayCompleteShown = useAppStore((s) => s.markDayCompleteShown);
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
 
   const feedback = useFeedback();
 
@@ -90,6 +96,7 @@ export default function Today({
 
   // ---- Rollover: yesterday's incomplete blocks, only surfaced while viewing today ----
   const isViewingToday = viewDay === todayProgramDay;
+<<<<<<< HEAD
 
   // ---- "Day complete" popup: fires once per calendar date, the moment today's last pending task clears ----
   const todayDayInfo = dayCompletionInfo(profile.days[todayProgramDay]);
@@ -103,6 +110,8 @@ export default function Today({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayDayInfo.complete, dayCompleteAlreadyShown]);
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
   const yesterdayIso = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const rolloverCandidates: RolloverCandidate[] = isViewingToday
     ? (profile.timeBlocks[yesterdayIso] ?? []).filter((b) => !b.done).map((block) => ({ fromDate: yesterdayIso, block }))
@@ -461,6 +470,7 @@ export default function Today({
           }}
         />
       )}
+<<<<<<< HEAD
 
       {showDayComplete && (
         <DayCompleteModal
@@ -469,6 +479,8 @@ export default function Today({
           onClose={() => setShowDayComplete(false)}
         />
       )}
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
     </div>
   );
 }

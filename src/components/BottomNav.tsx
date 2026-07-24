@@ -1,11 +1,20 @@
+<<<<<<< HEAD
 import { Sunrise, Feather, Compass, ShieldCheck } from "lucide-react";
 
 export type Tab = "today" | "examen" | "detox" | "compass";
+=======
+import { Sunrise, Feather, Compass } from "lucide-react";
+
+export type Tab = "today" | "examen" | "compass";
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
 
 const TABS: { key: Tab; label: string; icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
   { key: "today", label: "Today", icon: Sunrise },
   { key: "examen", label: "Examen", icon: Feather },
+<<<<<<< HEAD
   { key: "detox", label: "Detox", icon: ShieldCheck },
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
   { key: "compass", label: "Compass", icon: Compass },
 ];
 

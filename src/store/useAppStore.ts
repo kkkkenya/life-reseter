@@ -117,7 +117,10 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
     mitByDay: p.mitByDay ?? {},
     weeklyFocus: p.weeklyFocus ?? {},
     eveningPlanned: p.eveningPlanned ?? {},
+<<<<<<< HEAD
     dayCompleteShown: p.dayCompleteShown ?? {},
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
     skipReasons: p.skipReasons ?? {},
     dailyGospel: p.dailyGospel ?? {},
     dailyReview: p.dailyReview ?? {},
@@ -163,7 +166,10 @@ const emptyProfile: UserProfile = {
   mitByDay: {},
   weeklyFocus: {},
   eveningPlanned: {},
+<<<<<<< HEAD
   dayCompleteShown: {},
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
   skipReasons: {},
   dailyGospel: {},
   dailyReview: {},
@@ -259,8 +265,11 @@ interface AppState {
   /** Copies an incomplete block from one date to another (used for "carry over to today"), removing it from the source. */
   moveTimeBlock: (fromDate: string, id: string, toDate: string) => void;
   setEveningPlanned: (dateKey: string, done: boolean) => void;
+<<<<<<< HEAD
   /** Marks today's "all tasks done" popup as shown so it only fires once per calendar date. */
   markDayCompleteShown: (dateKey: string) => void;
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
   addVentureLog: (venture: string, minutes: number) => void;
   addSleepLog: (bedtime: string, waketime: string) => void;
   setMit: (day: number, entry: MitEntry) => void;
@@ -867,12 +876,15 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
+<<<<<<< HEAD
       markDayCompleteShown: (dateKey) => {
         set((s) => ({
           profile: { ...s.profile, dayCompleteShown: { ...s.profile.dayCompleteShown, [dateKey]: true } },
         }));
       },
 
+=======
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
       addVentureLog: (venture, minutes) => {
         const entry: VentureLog = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

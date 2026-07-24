@@ -86,6 +86,10 @@ export default function App() {
   const checkMilestones = useAppStore((s) => s.checkMilestones);
   const [tab, setTab] = useState<Tab>("today");
   const [streaksOpen, setStreaksOpen] = useState(false);
+<<<<<<< HEAD
+=======
+  const [detoxOpen, setDetoxOpen] = useState(false);
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
 
   useSyncTheme();
   const { userId, loading: authLoading, isConfigured, signOut } = useSupabaseAuth();
@@ -120,15 +124,30 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
+<<<<<<< HEAD
       {tab === "today" && <Today onOpenExamen={() => setTab("examen")} onOpenStreaks={() => setStreaksOpen(true)} onOpenDetox={() => setTab("detox")} />}
       {tab === "examen" && <Examen />}
       {tab === "detox" && <Detox />}
+=======
+      {tab === "today" && (
+        <Today onOpenExamen={() => setTab("examen")} onOpenStreaks={() => setStreaksOpen(true)} onOpenDetox={() => setDetoxOpen(true)} />
+      )}
+      {tab === "examen" && <Examen />}
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
       {tab === "compass" && <Compass />}
       {streaksOpen && (
         <div className="fixed inset-0 z-40" style={{ background: "var(--color-bg)" }}>
           <Streaks onBack={() => setStreaksOpen(false)} />
         </div>
       )}
+<<<<<<< HEAD
+=======
+      {detoxOpen && (
+        <div className="fixed inset-0 z-40" style={{ background: "var(--color-bg)" }}>
+          <Detox onBack={() => setDetoxOpen(false)} />
+        </div>
+      )}
+>>>>>>> 2cbfdcef78ad01192da598ce6a87ce9ba4536bfc
       <BottomNav active={tab} onChange={setTab} />
       <TopControls syncStatus={syncStatus} onSignOut={signOut} />
       <CelebrationLayer />
