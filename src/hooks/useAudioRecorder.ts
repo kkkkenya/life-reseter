@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const MAX_SECONDS = 45;
+const MAX_DEFAULT_SECONDS = 45;
 
 /** True where MediaRecorder + microphone capture exist (covers Firefox and
  *  iOS Safari, which lack SpeechRecognition). */
@@ -25,7 +25,7 @@ function pickMime(): string {
 }
 
 /** Record-then-transcribe fallback for browsers without SpeechRecognition. */
-export function useAudioRecorder() {
+export function useAudioRecorder(maxSeconds = MAX_DEFAULT_SECONDS) {
   const [recording, setRecording] = useState(false);
   const [supported] = useState(canRecordAudio);
   const recRef = useRef<MediaRecorder | null>(null);
@@ -105,7 +105,7 @@ export function useAudioRecorder() {
       } catch {
         /* noop */
       }
-    }, MAX_SECONDS * 1000);
+    }, maxSeconds * 1000);
     // Caller holds finish() for the Stop button; the auto-stop timer calls
     // rec.stop() directly, which still resolves `done`.
     const finish = () => {
@@ -117,7 +117,7 @@ export function useAudioRecorder() {
       return done;
     };
     return { finish };
-  }, [stopTracks]);
+  }, [stopTracks, maxSeconds]);
 
   const transcribe = useCallback(async (audioBase64: string, mimeType: string): Promise<string> => {
     const res = await fetch("/api/transcribe", {

@@ -666,6 +666,7 @@ export const useAppStore = create<AppState>()(
             morningEnergy: entry.morningEnergy ?? existing?.morningEnergy,
             gratitude: entry.gratitude ?? existing?.gratitude,
             examen: entry.examen ?? existing?.examen,
+            media: entry.media ?? existing?.media ?? [],
             savedAt: nowIso(),
           };
           return { profile: { ...s.profile, journal: { ...s.profile.journal, [day]: merged } } };

@@ -194,7 +194,17 @@ export interface JournalEntry {
   morningEnergy?: number; // 1-5, captured separately in the morning
   gratitude?: string; // 10-second quick tap
   examen?: ExamenEntry;
+  /** Device-local media refs (photos of handwritten pages, voice notes).
+   *  Blobs live in IndexedDB under the same id — never in the synced JSON. */
+  media?: JournalMediaRef[];
   savedAt: string;
+}
+
+export interface JournalMediaRef {
+  id: string;
+  kind: "photo" | "audio";
+  createdAt: string; // ISO datetime
+  durationSec?: number; // audio only, best-effort
 }
 
 export interface IncomeEntry {

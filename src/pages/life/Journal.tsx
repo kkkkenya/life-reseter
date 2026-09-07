@@ -1,8 +1,31 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card, PrimaryButton, GhostButton } from "@/components/ui";
+import { JournalMediaGrid } from "@/components/JournalMedia";
 import { useAppStore } from "@/store/useAppStore";
+import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { programDayFromDate, dateFromProgramDay, formatShortDate } from "@/lib/planGenerator";
-import { Check, ChevronDown, Sparkles } from "lucide-react";
+import {
+  MAX_AUDIO_PER_ENTRY,
+  MAX_AUDIO_UPLOAD_BYTES,
+  MAX_PHOTOS_PER_ENTRY,
+  deleteMediaBlob,
+  downscalePhoto,
+  getMediaBlob,
+  newMediaId,
+  saveMediaBlob,
+} from "@/lib/mediaStore";
+import type { JournalMediaRef } from "@/types";
+import { Camera, Check, ChevronDown, ImagePlus, Mic, Sparkles, Square } from "lucide-react";
+
+function mediaSummary(media?: JournalMediaRef[]): string | null {
+  if (!media || media.length === 0) return null;
+  const photos = media.filter((m) => m.kind === "photo").length;
+  const audios = media.filter((m) => m.kind === "audio").length;
+  const bits: string[] = [];
+  if (photos > 0) bits.push(`${photos} photo${photos === 1 ? "" : "s"}`);
+  if (audios > 0) bits.push(`${audios} voice note${audios === 1 ? "" : "s"}`);
+  return bits.join(" · ") || null;
+}
 import { askGemini, isGeminiConfigured } from "@/lib/gemini";
 import { coachVoice } from "@/data/coachTones";
 
@@ -24,6 +47,15 @@ export default function Journal() {
   const [tomorrowWin, setTomorrowWin] = useState(existing?.tomorrowWin ?? "");
   const [mood, setMood] = useState(existing?.mood ?? 6);
   const [saved, setSaved] = useState(false);
+  const [media, setMedia] = useState<JournalMediaRef[]>(existing?.media ?? []);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const recorder = useAudioRecorder(300); // 5 min journal takes
+  const [recSession, setRecSession] = useState<{ finish: () => Promise<{ base64: string; mimeType: string }> } | null>(null);
+  const recStartedAt = useRef<number>(0);
+  const [transcribingId, setTranscribingId] = useState<string | null>(null);
 
   const [examenOpen, setExamenOpen] = useState(Boolean(existing?.examen));
   const [noticedGod, setNoticedGod] = useState(existing?.examen?.noticedGod ?? "");
@@ -46,10 +78,113 @@ export default function Journal() {
       couldImprove,
       tomorrowWin,
       mood,
+      media,
       examen: examenOpen ? { noticedGod, fellShort, gratefulFor } : existing?.examen,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
+  }
+
+  function persistMedia(next: JournalMediaRef[]) {
+    setMedia(next);
+    // Persist refs immediately so an attached photo/voice note survives even
+    // if the user never taps Save entry. Blobs stay in IndexedDB regardless.
+    saveJournalEntry(todayDay, { media: next });
+  }
+
+  async function handlePhoto(file: File | undefined) {
+    if (!file) return;
+    setMediaError(null);
+    if (media.filter((m) => m.kind === "photo").length >= MAX_PHOTOS_PER_ENTRY) {
+      setMediaError(`Up to ${MAX_PHOTOS_PER_ENTRY} photos per day — remove one first.`);
+      return;
+    }
+    try {
+      const blob = await downscalePhoto(file);
+      const ref: JournalMediaRef = { id: newMediaId("photo"), kind: "photo", createdAt: new Date().toISOString() };
+      await saveMediaBlob(ref.id, blob);
+      persistMedia([...media, ref]);
+    } catch (e) {
+      setMediaError(e instanceof Error ? e.message : "Couldn't add that photo.");
+    }
+  }
+
+  async function toggleRecord() {
+    setMediaError(null);
+    if (recSession) {
+      const session = recSession;
+      setRecSession(null);
+      try {
+        const { base64, mimeType } = await session.finish();
+        const blob = new Blob([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], { type: mimeType });
+        const ref: JournalMediaRef = {
+          id: newMediaId("audio"),
+          kind: "audio",
+          createdAt: new Date().toISOString(),
+          durationSec: Math.max(1, Math.round((Date.now() - recStartedAt.current) / 1000)),
+        };
+        await saveMediaBlob(ref.id, blob);
+        persistMedia([...media, ref]);
+      } catch (e) {
+        setMediaError(e instanceof Error ? e.message : "Recording failed.");
+      }
+      return;
+    }
+    if (media.filter((m) => m.kind === "audio").length >= MAX_AUDIO_PER_ENTRY) {
+      setMediaError(`Up to ${MAX_AUDIO_PER_ENTRY} voice notes per day — remove one first.`);
+      return;
+    }
+    try {
+      const session = await recorder.start();
+      recStartedAt.current = Date.now();
+      setRecSession(session);
+    } catch (e) {
+      setMediaError(e instanceof Error ? e.message : "Recording failed.");
+    }
+  }
+
+  async function handleRemoveMedia(id: string) {
+    if (!confirm("Remove this attachment?")) return;
+    persistMedia(media.filter((m) => m.id !== id));
+    try {
+      await deleteMediaBlob(id);
+    } catch {
+      /* ref already gone; blob cleanup is best-effort */
+    }
+  }
+
+  async function handleTranscribe(ref: JournalMediaRef) {
+    setMediaError(null);
+    setTranscribingId(ref.id);
+    try {
+      const blob = await getMediaBlob(ref.id);
+      if (!blob) throw new Error("Audio file is gone from this device.");
+      if (blob.size > MAX_AUDIO_UPLOAD_BYTES) throw new Error("Too long to transcribe — keep it under a few minutes.");
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const parts = typeof reader.result === "string" ? reader.result.split(",") : [];
+          if (parts[1]) resolve(parts[1]);
+          else reject(new Error("Couldn't read that recording."));
+        };
+        reader.onerror = () => reject(new Error("Couldn't read that recording."));
+        reader.readAsDataURL(blob);
+      });
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioBase64: base64, mimeType: blob.type || "audio/webm" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Transcription failed.");
+      const text: string = data?.transcript ?? "";
+      if (!text.trim()) throw new Error("Didn't catch anything transcribable.");
+      setWentWell((w) => (w.trim() ? `${w.trim()}\n\nVoice note: ${text.trim()}` : `Voice note: ${text.trim()}`));
+    } catch (e) {
+      setMediaError(e instanceof Error ? e.message : "Transcription failed.");
+    } finally {
+      setTranscribingId(null);
+    }
   }
 
   async function reflectOnEntry() {
@@ -169,6 +304,53 @@ export default function Journal() {
           </div>
         </div>
 
+        <div className="mt-5">
+          <p className="mb-1.5 text-sm font-medium">Pages & voice notes</p>
+          <p className="mb-2 text-xs" style={{ color: "var(--color-ink-dim)" }}>
+            Snap handwritten pages or talk it out instead of typing. Media stays on this device.
+          </p>
+          <JournalMediaGrid
+            media={media}
+            transcribingId={transcribingId}
+            onRemove={handleRemoveMedia}
+            onTranscribe={handleTranscribe}
+          />
+          <div className={(media.length > 0 ? "mt-2.5 " : "") + "flex gap-2"}>
+            <button
+              onClick={() => galleryRef.current?.click()}
+              className="tactile flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed py-2.5 text-xs font-semibold"
+              style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}
+            >
+              <ImagePlus size={14} /> Add photo
+            </button>
+            <button
+              onClick={() => cameraRef.current?.click()}
+              aria-label="Take a photo"
+              className="tactile flex h-auto w-11 items-center justify-center rounded-xl border border-dashed"
+              style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}
+            >
+              <Camera size={15} />
+            </button>
+            <button
+              onClick={() => void toggleRecord()}
+              className="tactile flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-semibold"
+              style={
+                recSession
+                  ? { background: "var(--color-bad)", color: "#fbf3e7" }
+                  : { background: "var(--color-ember-soft)", color: "var(--color-ember)" }
+              }
+            >
+              {recSession ? <Square size={12} fill="currentColor" /> : <Mic size={14} />}
+              {recSession ? "Stop" : recorder.recording ? "…" : "Voice note"}
+            </button>
+          </div>
+          <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={(e) => { void handlePhoto(e.target.files?.[0]); e.target.value = ""; }} />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { void handlePhoto(e.target.files?.[0]); e.target.value = ""; }} />
+          {mediaError && (
+            <p className="mt-1.5 text-xs" style={{ color: "var(--color-bad)" }}>{mediaError}</p>
+          )}
+        </div>
+
         <button
           onClick={() => setExamenOpen((o) => !o)}
           className="mt-4 flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm"
@@ -266,6 +448,11 @@ export default function Journal() {
                 {e.wentWell && (
                   <p className="mt-2 text-sm" style={{ color: "var(--color-ink)" }}>
                     {e.wentWell}
+                  </p>
+                )}
+                {mediaSummary(e.media) && (
+                  <p className="mt-1.5 text-xs" style={{ color: "var(--color-ink-dim)" }}>
+                    {mediaSummary(e.media)}
                   </p>
                 )}
               </Card>
