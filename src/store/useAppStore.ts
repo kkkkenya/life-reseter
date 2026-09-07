@@ -29,6 +29,8 @@ import type {
   QuestPillar,
   QuizAnswers,
   CheckInRecord,
+  ClassSession,
+  AssignmentDeadline,
   DevotionalSettings,
   CoachTone,
   CorrelationSnapshotEntry,
@@ -99,6 +101,8 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
     detoxHabits: Array.isArray(p.detoxHabits) ? p.detoxHabits : [],
     journal: p.journal ?? {},
     checkins: p.checkins ?? {},
+    classes: Array.isArray(p.classes) ? p.classes : [],
+    deadlines: Array.isArray(p.deadlines) ? p.deadlines : [],
     income: Array.isArray(p.income) ? p.income : [],
     expenses: Array.isArray(p.expenses) ? p.expenses : [],
     budgetCategories:
@@ -166,6 +170,8 @@ const emptyProfile: UserProfile = {
   lastGoalsReviewAt: null,
   milestones: [],
   checkins: {},
+  classes: [],
+  deadlines: [],
   timeBlocks: {},
   ventureLogs: [],
   sleepLogs: [],
@@ -258,6 +264,11 @@ interface AppState {
   setDream: (dream: string) => void;
   /** Saves this week's check-in (one per ISO week key, overwritten on redo). */
   saveCheckIn: (entry: Omit<CheckInRecord, "createdAt">) => void;
+  addClassSession: (c: Omit<ClassSession, "id">) => void;
+  removeClassSession: (id: string) => void;
+  addDeadline: (d: Omit<AssignmentDeadline, "id" | "done" | "createdAt">) => void;
+  toggleDeadlineDone: (id: string) => void;
+  removeDeadline: (id: string) => void;
   addVenture: (name: string) => void;
   removeVenture: (name: string) => void;
   removeBudgetCategory: (name: string) => void;
@@ -767,6 +778,52 @@ export const useAppStore = create<AppState>()(
             },
           },
         }));
+      },
+
+      addClassSession: (c) => {
+        const session: ClassSession = { ...c, id: `cls-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            classes: [...s.profile.classes, session].sort(
+              (a, b) => a.weekday - b.weekday || a.startTime.localeCompare(b.startTime)
+            ),
+          },
+        }));
+      },
+
+      removeClassSession: (id) => {
+        set((s) => ({ profile: { ...s.profile, classes: s.profile.classes.filter((c) => c.id !== id) } }));
+      },
+
+      addDeadline: (d) => {
+        const deadline: AssignmentDeadline = {
+          ...d,
+          id: `ddl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          done: false,
+          createdAt: new Date().toISOString(),
+        };
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            deadlines: [...s.profile.deadlines, deadline].sort((a, b) =>
+              `${a.dueDate} ${a.dueTime ?? ""}`.localeCompare(`${b.dueDate} ${b.dueTime ?? ""}`)
+            ),
+          },
+        }));
+      },
+
+      toggleDeadlineDone: (id) => {
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            deadlines: s.profile.deadlines.map((d) => (d.id === id ? { ...d, done: !d.done } : d)),
+          },
+        }));
+      },
+
+      removeDeadline: (id) => {
+        set((s) => ({ profile: { ...s.profile, deadlines: s.profile.deadlines.filter((d) => d.id !== id) } }));
       },
 
       addVenture: (name) => {

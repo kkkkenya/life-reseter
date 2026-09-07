@@ -252,8 +252,13 @@ body {
   animation: splash-ray-spin 9s linear infinite, splash-rays-in 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   opacity: 0.9;
 }
-.splash-sun {
+.splash-sun, .splash-moon {
   animation: splash-sun-rise 1s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.splash-star {
+  animation: splash-star-twinkle 1.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 .splash-blush {
   animation: splash-blush 1.6s ease-in-out 0.7s infinite alternate;
@@ -358,6 +363,10 @@ body {
   25% { opacity: 0.9; }
   100% { opacity: 0; transform: translateY(-26px) scale(1.15); }
 }
+@keyframes splash-star-twinkle {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
 @keyframes splash-letter-rise {
   from { opacity: 0; transform: translateY(16px) scale(0.9); }
   60% { opacity: 1; transform: translateY(-3px) scale(1.06); }
@@ -373,7 +382,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .splash-rays, .splash-sun, .splash-blush, .splash-hills,
+  .splash-rays, .splash-sun, .splash-moon, .splash-star, .splash-blush, .splash-hills,
   .splash-sprout, .splash-z, .splash-letter, .splash-sub, .splash-hello, .splash-dots span {
     animation: none !important;
   }

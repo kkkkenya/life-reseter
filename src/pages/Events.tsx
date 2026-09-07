@@ -28,6 +28,8 @@ import {
   toggleSavedEvent,
   type TechEvent,
 } from "@/lib/techEvents";
+import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { buildEventInsert } from "@/lib/googleCalendar";
 
 type Mode = "all" | "kenya" | "online" | "saved";
 type Cost = "all" | "free" | "paid";
@@ -206,6 +208,7 @@ function EventCard({
 export default function Events() {
   const addTimeBlock = useAppStore((s) => s.addTimeBlock);
   const feedback = useFeedback();
+  const gcal = useGoogleCalendar();
   const [mode, setMode] = useState<Mode>("all");
   const [day, setDay] = useState<string>("all");
   const [city, setCity] = useState<string>("all");
@@ -259,6 +262,21 @@ export default function Events() {
       lifeArea: "learning",
     });
     feedback.complete(el);
+    // Best-effort mirror to Google when connected (auth state is on the dot).
+    if (gcal.connected) {
+      void gcal
+        .insert(
+          buildEventInsert({
+            label: ev.title,
+            date: ev.date,
+            startTime: start,
+            endTime: end,
+            location: ev.venue ?? ev.city ?? undefined,
+            description: ev.url ?? undefined,
+          })
+        )
+        .catch(() => {});
+    }
   }
 
   async function handleShare(ev: TechEvent) {

@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Mic, Loader2, Check, Pencil, Square } from "lucide-react";
 import { GhostButton } from "@/components/ui";
 import { LIFE_AREAS } from "@/data/lifeAreas";
 import { useVoiceQA } from "@/hooks/useVoiceQA";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import { buildEventInsert } from "@/lib/googleCalendar";
 import {
   isValidIsoDate,
   isValidTime,
@@ -57,6 +59,13 @@ export function EventScanSheet({
 
   const voice = useVoiceQA();
   const recorder = useAudioRecorder();
+  const gcal = useGoogleCalendar();
+  const [toGoogle, setToGoogle] = useState(false);
+  const [gError, setGError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (gcal.connected) setToGoogle(true);
+  }, [gcal.connected]);
   const [voiceMsg, setVoiceMsg] = useState<string | null>(null);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [recSession, setRecSession] = useState<{ finish: () => Promise<{ base64: string; mimeType: string }> } | null>(null);
@@ -196,10 +205,31 @@ export function EventScanSheet({
   const timeOrderOk = timesValid && end > start;
   const valid = title.trim().length > 0 && isValidIsoDate(date) && timeOrderOk;
 
-  function confirm() {
-    if (!valid) return;
+  function buildBlock(): Omit<TimeBlock, "id"> {
     const label = location.trim() ? `${title.trim()} · ${location.trim()}` : title.trim();
-    onConfirm(date, { startTime: start, endTime: end, label: label.slice(0, 140), lifeArea: area });
+    return { startTime: start, endTime: end, label: label.slice(0, 140), lifeArea: area };
+  }
+
+  async function confirm() {
+    if (!valid) return;
+    setGError(null);
+    if (toGoogle && gcal.connected) {
+      try {
+        await gcal.insert(
+          buildEventInsert({
+            label: title.trim(),
+            date,
+            startTime: start,
+            endTime: end,
+            location: location.trim() || undefined,
+          })
+        );
+      } catch {
+        setGError("Google push failed — reconnect (green dot, top right) and retry, or keep it local only.");
+        return; // stay open so nothing is lost silently
+      }
+    }
+    onConfirm(date, buildBlock());
   }
 
   return (
@@ -366,13 +396,32 @@ export function EventScanSheet({
               </GhostButton>
               <button
                 disabled={!valid}
-                onClick={confirm}
+                onClick={() => void confirm()}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-full py-3 text-sm font-semibold disabled:opacity-40"
                 style={{ background: "var(--color-ember)", color: "#fbf3e7" }}
               >
                 <Check size={14} /> Add to calendar
               </button>
             </div>
+            {gcal.connected && (
+              <label className="flex cursor-pointer items-center gap-2 text-xs" style={{ color: "var(--color-ink-dim)" }}>
+                <input
+                  type="checkbox"
+                  checked={toGoogle}
+                  onChange={(e) => setToGoogle(e.target.checked)}
+                  className="accent-[var(--color-ember)]"
+                />
+                Also add to Google Calendar
+              </label>
+            )}
+            {gError && (
+              <div className="rounded-xl px-3 py-2 text-xs" style={{ background: "var(--color-ember-soft)", color: "var(--color-ember)" }}>
+                <p>{gError}</p>
+                <button onClick={() => onConfirm(date, buildBlock())} className="mt-1 font-semibold underline underline-offset-2">
+                  Keep it local only →
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

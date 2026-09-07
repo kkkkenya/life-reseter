@@ -18,7 +18,36 @@ const Events = lazy(() => import("@/pages/Events"));
 import { BottomNav, type Tab } from "@/components/BottomNav";
 import { CelebrationLayer } from "@/components/CelebrationLayer";
 import SplashScreen from "@/components/SplashScreen";
+import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { playTap } from "@/lib/sound";
+
+function GoogleDot() {
+  const { configured, connected, busy, connect, disconnect } = useGoogleCalendar();
+  if (!configured) return null;
+  return (
+    <button
+      onClick={() => {
+        if (connected) {
+          if (confirm("Disconnect Google Calendar on this device?")) disconnect();
+        } else {
+          void connect();
+        }
+      }}
+      aria-label={connected ? "Google Calendar connected — tap to disconnect" : "Connect Google Calendar"}
+      title={connected ? "Google Calendar connected" : "Connect Google Calendar"}
+      className="flex h-8 items-center gap-1.5 rounded-lg px-2"
+      style={{ background: "var(--color-surface)" }}
+    >
+      <span
+        className="h-2.5 w-2.5 rounded-full"
+        style={{ background: connected ? "var(--color-good)" : "var(--color-bad)", opacity: busy ? 0.5 : 1 }}
+      />
+      <span className="text-[10px] font-semibold" style={{ color: "var(--color-ink-dim)" }}>
+        GCal
+      </span>
+    </button>
+  );
+}
 
 function PageFallback() {
   return <div className="min-h-screen" style={{ background: "var(--color-bg)" }} />;
@@ -53,6 +82,7 @@ function TopControls({ syncStatus, onSignOut }: { syncStatus: SyncStatus; onSign
 
   return (
     <div className="fixed right-4 top-4 z-30 flex items-center gap-1.5">
+      <GoogleDot />
       <SyncIndicator status={syncStatus} onSignOut={onSignOut} />
       <button
         onClick={() => {

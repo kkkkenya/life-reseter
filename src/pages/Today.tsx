@@ -11,6 +11,9 @@ import { isSunday, isoWeekKey } from "@/lib/isoWeek";
 import { type SchedulableTask } from "@/lib/autoSchedule";
 import { Card, PrimaryButton } from "@/components/ui";
 import { getSweetGreeting } from "@/lib/sweetWords";
+import { addDaysISO, buildWeekPlan, WEEKDAY_SHORT } from "@/lib/school";
+import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
+import type { GCalEvent } from "@/lib/googleCalendar";
 import { TaskList, type TaskEntry } from "@/pages/today/TaskList";
 import { AddTaskSheet } from "@/pages/today/AddTaskSheet";
 import { MitPickerSheet } from "@/pages/today/MitPickerSheet";
@@ -44,6 +47,7 @@ export default function Today({
   const setEveningPlanned = useAppStore((s) => s.setEveningPlanned);
   const addTimeBlock = useAppStore((s) => s.addTimeBlock);
   const removeTimeBlock = useAppStore((s) => s.removeTimeBlock);
+  const toggleDeadlineDone = useAppStore((s) => s.toggleDeadlineDone);
   const toggleTimeBlockDone = useAppStore((s) => s.toggleTimeBlockDone);
   const moveTimeBlock = useAppStore((s) => s.moveTimeBlock);
   const markDayCompleteShown = useAppStore((s) => s.markDayCompleteShown);
@@ -164,6 +168,36 @@ export default function Today({
   const review = profile.dailyReview[todayIso];
   const sweet = getSweetGreeting(new Date(), todayIso);
   const firstName = profile.displayName.trim().split(/\s+/)[0] || "";
+
+  // Coming Up: 7-day merge of timetable + blocks + deadlines (+ Google).
+  const weekPlan = buildWeekPlan(todayIso, 7, profile.classes, profile.timeBlocks, profile.deadlines);
+  const tomorrowPlan = weekPlan[1];
+  const gcal = useGoogleCalendar();
+  const [gEvents, setGEvents] = useState<GCalEvent[]>([]);
+
+  useEffect(() => {
+    if (!gcal.connected) {
+      setGEvents([]);
+      return;
+    }
+    let cancelled = false;
+    gcal
+      .list(todayIso, addDaysISO(todayIso, 6))
+      .then((evs) => {
+        if (!cancelled) setGEvents(evs);
+      })
+      .catch(() => {
+        /* token lapsed mid-flight — dot flips red on its own */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gcal.connected, todayIso]);
+
+  function gEventsOn(dateISO: string): GCalEvent[] {
+    return gEvents.filter((e) => (e.start?.dateTime?.slice(0, 10) ?? e.start?.date ?? "") === dateISO);
+  }
 
   return (
     <div className="mx-auto max-w-md px-5 pb-28 pt-14">
@@ -360,6 +394,113 @@ export default function Today({
         >
           <Plus size={12} /> Track a habit you're cutting down or quitting
         </button>
+      )}
+
+      {isViewingToday && tomorrowPlan && (
+        <Card className="mt-4" spineColor="var(--color-ember)">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ember)" }}>
+            Tomorrow · {formatShortDate(tomorrowPlan.date)}
+          </p>
+          {tomorrowPlan.classes.length === 0 &&
+            tomorrowPlan.blocks.length === 0 &&
+            tomorrowPlan.deadlines.length === 0 &&
+            gEventsOn(tomorrowPlan.date).length === 0 && (
+              <p className="mt-1.5 text-sm" style={{ color: "var(--color-ink-dim)" }}>
+                Nothing scheduled — a blank page. Plan it tonight.
+              </p>
+            )}
+          <div className="mt-2 space-y-1.5">
+            {tomorrowPlan.classes.map((c) => (
+              <div key={c.id} className="flex items-center gap-2 text-sm">
+                <span className="font-mono text-xs font-semibold" style={{ color: "var(--color-ember)" }}>
+                  {c.startTime}–{c.endTime}
+                </span>
+                <span className="font-medium">{c.course}</span>
+                {c.venue && (
+                  <span className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
+                    · {c.venue}
+                  </span>
+                )}
+              </div>
+            ))}
+            {tomorrowPlan.blocks.map((b) => (
+              <div key={b.id} className="flex items-center gap-2 text-sm">
+                <span className="font-mono text-xs" style={{ color: "var(--color-ink-dim)" }}>
+                  {b.startTime}–{b.endTime}
+                </span>
+                <span>{b.label}</span>
+              </div>
+            ))}
+            {tomorrowPlan.deadlines.map((d) => (
+              <button key={d.id} onClick={() => toggleDeadlineDone(d.id)} className="flex w-full items-center gap-2 text-left text-sm">
+                <span className="font-semibold" style={{ color: "var(--color-bad)" }}>
+                  Due{d.dueTime ? ` ${d.dueTime}` : ""}
+                </span>
+                <span>{d.title}</span>
+              </button>
+            ))}
+            {gEventsOn(tomorrowPlan.date).map((g, i) => (
+              <div key={g.id ?? i} className="flex items-center gap-2 text-sm" style={{ color: "var(--color-ink-dim)" }}>
+                <span className="font-mono text-xs">
+                  {g.start?.dateTime ? g.start.dateTime.slice(11, 16) : "all-day"}
+                </span>
+                <span>{g.summary ?? "(no title)"} · Google</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {isViewingToday && (
+        <Card className="mt-3">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
+            Rest of the week
+          </p>
+          <div className="mt-2 space-y-2.5">
+            {weekPlan.slice(2).map((day) => {
+              const items: { key: string; time: string; label: string; dim?: boolean }[] = [
+                ...day.classes.map((c) => ({ key: c.id, time: `${c.startTime}`, label: c.course })),
+                ...day.deadlines.map((d) => ({ key: d.id, time: d.dueTime ?? "Due", label: d.title })),
+                ...day.blocks.map((b) => ({ key: b.id, time: b.startTime, label: b.label, dim: true as const })),
+                ...gEventsOn(day.date).map((g, i) => ({
+                  key: g.id ?? `g${i}`,
+                  time: g.start?.dateTime ? g.start.dateTime.slice(11, 16) : "all-day",
+                  label: `${g.summary ?? "(no title)"}`,
+                  dim: true as const,
+                })),
+              ];
+              if (items.length === 0) return null;
+              return (
+                <div key={day.date}>
+                  <p className="font-mono text-[11px] font-semibold" style={{ color: "var(--color-ink-faint)" }}>
+                    {WEEKDAY_SHORT[day.weekday]} {day.date.slice(8, 10)}
+                  </p>
+                  {items.slice(0, 4).map((it) => (
+                    <p key={it.key} className="text-[13px]" style={{ color: it.dim ? "var(--color-ink-dim)" : "var(--color-ink)" }}>
+                      <span className="font-mono text-[11px]">{it.time}</span> · {it.label}
+                    </p>
+                  ))}
+                  {items.length > 4 && (
+                    <p className="text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
+                      +{items.length - 4} more
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {weekPlan.slice(2).every(
+              (day) =>
+                day.classes.length === 0 &&
+                day.blocks.length === 0 &&
+                day.deadlines.length === 0 &&
+                gEventsOn(day.date).length === 0
+            ) && (
+              <p className="text-sm" style={{ color: "var(--color-ink-dim)" }}>
+                Clear week ahead. Add classes in Compass → School.
+              </p>
+            )}
+          </div>
+        </Card>
       )}
 
       {isViewingToday && !profile.journal[todayProgramDay] && (

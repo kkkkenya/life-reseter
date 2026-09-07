@@ -255,6 +255,28 @@ export interface CheckInRecord {
   createdAt: string; // ISO datetime
 }
 
+/** Weekly recurring class (timetable). Repeats every week, no end date. */
+export interface ClassSession {
+  id: string;
+  course: string;
+  weekday: number; // 0=Sun..6=Sat
+  startTime: string; // "HH:MM"
+  endTime: string; // "HH:MM"
+  venue?: string;
+  lecturer?: string;
+}
+
+/** One-off deadline (assignment, exam, application). */
+export interface AssignmentDeadline {
+  id: string;
+  title: string;
+  course?: string;
+  dueDate: string; // YYYY-MM-DD
+  dueTime?: string; // "HH:MM"
+  done: boolean;
+  createdAt: string; // ISO datetime
+}
+
 export interface Milestone {
   id: string;
   achievedAt: string;
@@ -375,6 +397,8 @@ export interface UserProfile {
   lastGoalsReviewAt: string | null; // ISO datetime, null = never reviewed
   milestones: Milestone[];
   checkins: Record<string, CheckInRecord>; // ISO week key -> that week's check-in
+  classes: ClassSession[]; // weekly recurring timetable
+  deadlines: AssignmentDeadline[];
   timeBlocks: Record<string, TimeBlock[]>; // ISO date -> blocks
   ventureLogs: VentureLog[];
   sleepLogs: SleepLog[];
