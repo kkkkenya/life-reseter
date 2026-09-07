@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui";
-import type { DayRecord } from "@/types";
+import type { DayRecord, TimeBlock } from "@/types";
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_LABELS = [
@@ -25,10 +25,12 @@ export function CalendarGrid({
   days,
   viewDate,
   onSelectDate,
+  timeBlocks,
 }: {
   days: Record<number, DayRecord>;
   viewDate: string; // ISO date of the currently-viewed day
   onSelectDate: (isoDate: string) => void;
+  timeBlocks?: Record<string, TimeBlock[]>;
 }) {
   const byDate = useMemo(() => {
     const map = new Map<string, DayRecord>();
@@ -76,6 +78,7 @@ export function CalendarGrid({
             const isSelected = iso === viewDate;
             const isToday = iso === todayIso;
             const dayNum = Number(iso.slice(8, 10));
+            const eventCount = timeBlocks?.[iso]?.length ?? 0;
             return (
               <button
                 key={iso}
@@ -95,6 +98,11 @@ export function CalendarGrid({
                   }}
                 >
                   {dayNum}
+                </span>
+                <span className="flex h-1.5 items-center gap-0.5" aria-hidden="true">
+                  {eventCount > 0 && (
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--color-ember)" }} />
+                  )}
                 </span>
               </button>
             );
@@ -123,11 +131,12 @@ export function CalendarGrid({
             const isSelected = iso === viewDate;
             const isToday = iso === todayIso;
             const dayNum = Number(iso.slice(8, 10));
+            const hasEvents = (timeBlocks?.[iso]?.length ?? 0) > 0;
             return (
               <button
                 key={iso}
                 onClick={() => onSelectDate(iso)}
-                className="flex aspect-square items-center justify-center rounded-lg text-xs font-medium"
+                className="relative flex aspect-square flex-col items-center justify-center rounded-lg text-xs font-medium"
                 style={{
                   background: completionColor(rec),
                   color: rec ? "#fbf3e7" : "var(--color-ink-dim)",
@@ -136,6 +145,13 @@ export function CalendarGrid({
                 }}
               >
                 {dayNum}
+                {hasEvents && (
+                  <span
+                    className="absolute bottom-1 h-1.5 w-1.5 rounded-full"
+                    style={{ background: "var(--color-ember)" }}
+                    aria-label="Has scheduled events"
+                  />
+                )}
               </button>
             );
           })}

@@ -1,4 +1,4 @@
-import * as Icons from "lucide-react";
+import { resolveIcon } from "./iconMap";
 
 /**
  * Renders a lucide-react icon by string name (as stored in our data model),
@@ -13,9 +13,8 @@ export function IconFor({
   name: string;
   size?: number;
   color?: string;
-  fallback?: keyof typeof Icons;
+  fallback?: string;
 }) {
-  const Cmp = (Icons as unknown as Record<string, React.ComponentType<{ size?: number; color?: string }>>)[name]
-    ?? (Icons as unknown as Record<string, React.ComponentType<{ size?: number; color?: string }>>)[fallback];
+  const Cmp = resolveIcon(name, fallback);
   return <Cmp size={size} color={color} />;
 }

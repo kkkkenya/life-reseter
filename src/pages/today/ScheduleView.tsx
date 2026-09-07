@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X as XIcon, Check, ArrowDownToLine, Wand2 } from "lucide-react";
+import { X as XIcon, Check, ArrowDownToLine, Wand2, ScanLine } from "lucide-react";
 import { Card, GhostButton } from "@/components/ui";
 import { LIFE_AREAS } from "@/data/lifeAreas";
 import { suggestAutoSchedule, type SchedulableTask } from "@/lib/autoSchedule";
@@ -19,6 +19,7 @@ export function ScheduleView({
   onToggleDone,
   onCarryOver,
   onAutoSchedule,
+  onScanPoster,
 }: {
   blocks: TimeBlock[];
   rolloverCandidates: RolloverCandidate[];
@@ -28,6 +29,7 @@ export function ScheduleView({
   onToggleDone: (id: string) => void;
   onCarryOver: (fromDate: string, id: string) => void;
   onAutoSchedule: (suggestions: ReturnType<typeof suggestAutoSchedule>) => void;
+  onScanPoster?: () => void;
 }) {
   const [blockForm, setBlockForm] = useState(false);
   const [blockStart, setBlockStart] = useState("09:00");
@@ -127,13 +129,24 @@ export function ScheduleView({
       })}
 
       {!blockForm ? (
-        <button
-          onClick={() => setBlockForm(true)}
-          className="w-full rounded-2xl border border-dashed py-3 text-sm font-medium"
-          style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}
-        >
-          + Add a block
-        </button>
+        <div className="space-y-2">
+          {onScanPoster && (
+            <button
+              onClick={onScanPoster}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold"
+              style={{ background: "var(--color-ember-soft)", color: "var(--color-ember)" }}
+            >
+              <ScanLine size={14} /> Scan poster / screenshot
+            </button>
+          )}
+          <button
+            onClick={() => setBlockForm(true)}
+            className="w-full rounded-2xl border border-dashed py-3 text-sm font-medium"
+            style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}
+          >
+            + Add a block
+          </button>
+        </div>
       ) : (
         <Card>
           <div className="flex gap-2">

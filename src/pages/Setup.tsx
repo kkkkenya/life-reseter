@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import * as Icons from "lucide-react";
 import { X } from "lucide-react";
+import { resolveIcon } from "@/components/iconMap";
 import { TASK_CATALOG, DEFAULT_STARTER_TASK_IDS, findTaskDef } from "@/data/taskCatalog";
 import { Card, GhostButton, PrimaryButton, ScreenShell } from "@/components/ui";
 import { useAppStore } from "@/store/useAppStore";
 
 function IconFor({ name, size = 16, color }: { name: string; size?: number; color?: string }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const Cmp = (Icons as any)[name] ?? Icons.Circle;
+  const Cmp = resolveIcon(name);
   return <Cmp size={size} color={color} />;
 }
 

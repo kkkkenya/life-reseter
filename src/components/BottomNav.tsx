@@ -1,12 +1,13 @@
-import { Sunrise, Feather, Compass, ShieldCheck } from "lucide-react";
+import { Sunrise, Feather, Compass, ShieldCheck, CalendarDays } from "lucide-react";
 
-export type Tab = "today" | "examen" | "detox" | "compass";
+export type Tab = "today" | "examen" | "detox" | "compass" | "events";
 
 const TABS: { key: Tab; label: string; icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
   { key: "today", label: "Today", icon: Sunrise },
   { key: "examen", label: "Examen", icon: Feather },
   { key: "detox", label: "Detox", icon: ShieldCheck },
   { key: "compass", label: "Compass", icon: Compass },
+  { key: "events", label: "Events", icon: CalendarDays },
 ];
 
 export function BottomNav({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {

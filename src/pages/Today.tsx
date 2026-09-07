@@ -10,11 +10,13 @@ import { coachVoice } from "@/data/coachTones";
 import { isSunday, isoWeekKey } from "@/lib/isoWeek";
 import { type SchedulableTask } from "@/lib/autoSchedule";
 import { Card, PrimaryButton } from "@/components/ui";
+import { getSweetGreeting } from "@/lib/sweetWords";
 import { TaskList, type TaskEntry } from "@/pages/today/TaskList";
 import { AddTaskSheet } from "@/pages/today/AddTaskSheet";
 import { MitPickerSheet } from "@/pages/today/MitPickerSheet";
 import { ScheduleView, type RolloverCandidate } from "@/pages/today/ScheduleView";
 import { CalendarGrid } from "@/pages/today/CalendarGrid";
+import { EventScanSheet } from "@/pages/today/EventScanSheet";
 import { QuestBoard } from "@/pages/today/QuestBoard";
 import { DailyReviewCard } from "@/pages/today/DailyReviewCard";
 import { EveningPlanningCard } from "@/pages/today/EveningPlanningCard";
@@ -53,6 +55,7 @@ export default function Today({
     : 1;
   const [viewDay, setViewDay] = useState(todayProgramDay);
   const [addOpen, setAddOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [view, setView] = useState<"list" | "schedule" | "calendar">("list");
   const [mitPicking, setMitPicking] = useState(false);
 
@@ -159,18 +162,24 @@ export default function Today({
   }
 
   const review = profile.dailyReview[todayIso];
+  const sweet = getSweetGreeting(new Date(), todayIso);
 
   return (
     <div className="mx-auto max-w-md px-5 pb-28 pt-14">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
-            Your reset
+            {sweet.greeting} ☀️
           </p>
           <h1 className="font-display text-2xl font-semibold">Day {viewDay}</h1>
           <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
             {formatShortDate(profile.days[viewDay]?.date ?? dateFromProgramDay(profile.startDate ?? todayIso, viewDay))}
           </p>
+          {isViewingToday && (
+            <p className="mt-1 text-sm font-medium" style={{ color: "var(--color-ember)" }}>
+              {sweet.note}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -405,6 +414,7 @@ export default function Today({
             rolloverCandidates={rolloverCandidates}
             autoScheduleCandidates={autoScheduleCandidates}
             onAddBlock={(block) => rec && addTimeBlock(rec.date, block)}
+            onScanPoster={() => setScanOpen(true)}
             onRemoveBlock={(id) => rec && removeTimeBlock(rec.date, id)}
             onToggleDone={(id) => {
               if (!rec) return;
@@ -438,6 +448,7 @@ export default function Today({
           <CalendarGrid
             days={profile.days}
             viewDate={rec.date}
+            timeBlocks={profile.timeBlocks}
             onSelectDate={(iso) => {
               const day = programDayFromDate(profile.startDate!, iso);
               setViewDay(day);
@@ -449,6 +460,17 @@ export default function Today({
 
       {addOpen && (
         <AddTaskSheet existingTasks={profile.tasks} onClose={() => setAddOpen(false)} onConfirm={confirmAddTask} />
+      )}
+
+      {scanOpen && (
+        <EventScanSheet
+          onClose={() => setScanOpen(false)}
+          onConfirm={(date, block) => {
+            addTimeBlock(date, block);
+            setScanOpen(false);
+            feedback.complete(null);
+          }}
+        />
       )}
 
       {mitPicking && (
