@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, Check } from "lucide-react";
 import { resolveIcon } from "@/components/iconMap";
-import { TASK_CATALOG, DEFAULT_STARTER_TASK_IDS, findTaskDef } from "@/data/taskCatalog";
+import { TASK_CATALOG, findTaskDef } from "@/data/taskCatalog";
 import { LIFE_AREAS } from "@/data/lifeAreas";
-import { Card, GhostButton, PrimaryButton, ScreenShell, TopProgress } from "@/components/ui";
+import { GhostButton, PrimaryButton, ScreenShell, TopProgress } from "@/components/ui";
 import { useAppStore } from "@/store/useAppStore";
 import {
   MATTER_OPTIONS,
@@ -16,6 +16,7 @@ import {
   composeAboutMe,
   pillarsFor,
   quizFromAnswers,
+  suggestTasks,
   type OnboardingAnswers,
 } from "@/lib/onboarding";
 import type { CoachTone, LifeAreaKey } from "@/types";
@@ -40,6 +41,8 @@ const STEPS = [
   "rhythm",
   "quit",
   "vision",
+  "dream",
+  "nightmare",
   "income",
   "tasks",
   "start",
@@ -97,9 +100,7 @@ function OptionCard({
 }
 
 export default function Setup() {
-  const tasks = useAppStore((s) => s.profile.tasks);
   const addTask = useAppStore((s) => s.addTask);
-  const removeTask = useAppStore((s) => s.removeTask);
   const startProgram = useAppStore((s) => s.startProgram);
   const markOnboarded = useAppStore((s) => s.markOnboarded);
   const setDisplayName = useAppStore((s) => s.setDisplayName);
@@ -112,6 +113,8 @@ export default function Setup() {
   const seedStreaksFromSelection = useAppStore((s) => s.seedStreaksFromSelection);
   const setGoalWhy = useAppStore((s) => s.setGoalWhy);
   const setIncomeGoal = useAppStore((s) => s.setIncomeGoal);
+  const setDream = useAppStore((s) => s.setDream);
+  const setVowAntiVision = useAppStore((s) => s.setVowAntiVision);
   const devotionalMode = useAppStore((s) => s.profile.devotional.mode);
 
   const [stepIdx, setStepIdx] = useState(0);
@@ -137,25 +140,35 @@ export default function Setup() {
   const [incomeMin, setIncomeMin] = useState("30000");
   const [incomeMax, setIncomeMax] = useState("60000");
   const [incomeTarget, setIncomeTarget] = useState(`${new Date().getFullYear()}-12-31`);
+  const [dream, setDreamLocal] = useState("");
+  const [nightmare, setNightmare] = useState("");
 
-  // Task picker state (carried over from the old setup).
+  // Task picker: 20 curated suggestions, pick 3+, per-task frequency.
+  const suggestions = useMemo(() => suggestTasks(focusAreas, 20), [focusAreas]);
+  const [picked, setPicked] = useState<Record<string, number>>({});
+  const pickedCount = Object.keys(picked).length;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [freq, setFreq] = useState(5);
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const seededRef = useRef(false);
 
-  useEffect(() => {
-    if (seededRef.current) return;
-    if (tasks.length === 0) {
-      seededRef.current = true;
-      DEFAULT_STARTER_TASK_IDS.forEach((id) => {
-        const def = findTaskDef(id);
-        if (def) addTask(def.id, def.label, def.icon, def.category, def.lifeArea, 7, true, 1);
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  function togglePick(taskId: string, defaultFreq: number) {
+    setPicked((prev) => {
+      if (prev[taskId] !== undefined) {
+        const next = { ...prev };
+        delete next[taskId];
+        return next;
+      }
+      return { ...prev, [taskId]: defaultFreq };
+    });
+  }
+
+  function nudgeFreq(taskId: string, delta: number) {
+    setPicked((prev) => {
+      const cur = prev[taskId] ?? 5;
+      return { ...prev, [taskId]: Math.min(7, Math.max(1, cur + delta)) };
+    });
+  }
 
   function toggle<T>(list: T[], v: T, max: number): T[] {
     if (list.includes(v)) return list.filter((x) => x !== v);
@@ -167,7 +180,8 @@ export default function Setup() {
     if (!pendingTaskId) return;
     const def = findTaskDef(pendingTaskId);
     if (!def) return;
-    addTask(def.id, def.label, def.icon, def.category, def.lifeArea, freq, true, 1);
+    // Custom picks join the selection (not the store yet — committed on Begin).
+    setPicked((prev) => (prev[def.id] !== undefined ? prev : { ...prev, [def.id]: freq }));
     setPendingTaskId(null);
     setPickerOpen(false);
     setFreq(5);
@@ -189,6 +203,8 @@ export default function Setup() {
       sleep,
       quit,
       vision,
+      dream,
+      nightmare,
       incomeMin,
       incomeMax,
       incomeTarget,
@@ -203,6 +219,8 @@ export default function Setup() {
     setPinnedFocusArea(focusAreas[0] ?? null);
     if (quit.length > 0) seedStreaksFromSelection(quit);
     if (vision.trim() && focusAreas[0]) setGoalWhy(focusAreas[0], vision.trim().slice(0, 280));
+    if (dream.trim()) setDream(dream);
+    if (nightmare.trim()) setVowAntiVision(nightmare.trim().slice(0, 500));
     const min = Math.max(0, Math.round(Number(incomeMin) || 0));
     const max = Math.max(0, Math.round(Number(incomeMax) || 0));
     if (min > 0 && max > 0) {
@@ -212,6 +230,11 @@ export default function Setup() {
         currency: "KES",
         targetDate: /^\d{4}-\d{2}-\d{2}$/.test(incomeTarget) ? incomeTarget : `${new Date().getFullYear()}-12-31`,
       });
+    }
+    for (const [taskId, frequency] of Object.entries(picked)) {
+      const def = findTaskDef(taskId);
+      if (!def) continue;
+      addTask(def.id, def.label, def.icon, def.category, def.lifeArea, frequency, true, 1);
     }
     startProgram(startDate);
     markOnboarded();
@@ -515,6 +538,44 @@ export default function Setup() {
           </div>
         )}
 
+        {step === "dream" && (
+          <div>
+            <StepHead kicker="No limits" title="Ten years. Anything possible. What?" sub="Forget realistic. This is the dream that makes the discipline worth it — your North Star." />
+            <textarea
+              value={dream}
+              onChange={(e) => setDreamLocal(e.target.value)}
+              placeholder="e.g. Running my own engineering firm, building things that outlive me…"
+              rows={4}
+              maxLength={280}
+              className="mt-6 w-full resize-none rounded-2xl border p-4 text-sm outline-none"
+              style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink)" }}
+            />
+            <div className="mt-6 space-y-2">
+              <PrimaryButton onClick={next}>Continue</PrimaryButton>
+              <GhostButton onClick={next}>Skip</GhostButton>
+            </div>
+          </div>
+        )}
+
+        {step === "nightmare" && (
+          <div>
+            <StepHead kicker="The other side" title="And if nothing changes for 5 years?" sub="Look at it once, honestly. Then we make sure it never happens." />
+            <textarea
+              value={nightmare}
+              onChange={(e) => setNightmare(e.target.value)}
+              placeholder="e.g. Same room, same habits, watching everyone else move…"
+              rows={4}
+              maxLength={500}
+              className="mt-6 w-full resize-none rounded-2xl border p-4 text-sm outline-none"
+              style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink)" }}
+            />
+            <div className="mt-6 space-y-2">
+              <PrimaryButton onClick={next}>Continue</PrimaryButton>
+              <GhostButton onClick={next}>Skip</GhostButton>
+            </div>
+          </div>
+        )}
+
         {step === "income" && (
           <div>
             <StepHead kicker="Money moves" title="What monthly income are we normalizing?" sub="Your daily quests will quietly pull toward this number. KES, monthly." />
@@ -569,35 +630,81 @@ export default function Setup() {
 
         {step === "tasks" && (
           <div>
-            <StepHead kicker="The work" title={`${firstName}, what are we tracking?`} sub="Pick your tasks. No quiz, no theater — this is the last stretch." />
-            <div className="mt-6 space-y-3">
-              {tasks.map((t) => (
-                <Card key={t.uid} className="flex items-center justify-between py-3">
-                  <div className="flex items-center gap-3">
-                    <IconFor name={t.icon} size={18} color="var(--color-ember)" />
-                    <div>
-                      <p className="text-sm font-medium">{t.label}</p>
-                      <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
-                        {t.frequencyPerWeek}x/week
-                      </p>
+            <StepHead
+              kicker="The work"
+              title={`${firstName}, build your lineup`}
+              sub={`I picked 20 for you${focusAreas.length > 0 ? " from your focus areas" : ""}. Take as many as you want — minimum 3. Tap a picked one to set days per week.`}
+            />
+            <p className="mt-3 text-xs font-semibold" style={{ color: pickedCount >= 3 ? "var(--color-good)" : "var(--color-ember)" }}>
+              {pickedCount} selected{pickedCount < 3 ? ` — ${3 - pickedCount} more to go` : " — looking strong"}
+            </p>
+            <div className="mt-3 space-y-2">
+              {suggestions.map(({ def, suggestedFreq, reason }) => {
+                const freq = picked[def.id];
+                const selected = freq !== undefined;
+                return (
+                  <div
+                    key={def.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => togglePick(def.id, suggestedFreq)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") togglePick(def.id, suggestedFreq);
+                    }}
+                    className="tactile w-full rounded-2xl border px-4 py-3"
+                    style={{
+                      borderColor: selected ? "var(--color-ember)" : "var(--color-line)",
+                      background: selected ? "var(--color-ember-soft)" : "var(--color-surface)",
+                      boxShadow: "var(--shadow-flush)",
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <IconFor name={def.icon} size={18} color="var(--color-ember)" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{def.label}</p>
+                        <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
+                          {reason}
+                        </p>
+                      </div>
+                      {selected && <Check size={15} color="var(--color-ember)" className="shrink-0" />}
                     </div>
+                    {selected && (
+                      <div className="mt-2 flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => nudgeFreq(def.id, -1)}
+                          aria-label={`Fewer days for ${def.label}`}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg font-bold"
+                          style={{ background: "var(--color-surface)" }}
+                        >
+                          −
+                        </button>
+                        <span className="font-mono text-xs font-semibold" style={{ color: "var(--color-ember)" }}>
+                          {freq}x / week
+                        </span>
+                        <button
+                          onClick={() => nudgeFreq(def.id, 1)}
+                          aria-label={`More days for ${def.label}`}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg font-bold"
+                          style={{ background: "var(--color-surface)" }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => removeTask(t.uid)} aria-label={`Remove ${t.label}`}>
-                    <X size={16} color="var(--color-ink-faint)" />
-                  </button>
-                </Card>
-              ))}
+                );
+              })}
               <button
                 onClick={() => setPickerOpen(true)}
                 className="w-full rounded-2xl border border-dashed py-3 text-sm font-medium"
                 style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}
               >
-                + Add a task
+                + Can't find it? Add a custom task
               </button>
             </div>
             <div className="mt-6 space-y-2">
-              <PrimaryButton disabled={tasks.length === 0} onClick={next}>
-                Continue
+              <PrimaryButton disabled={pickedCount < 3} onClick={next}>
+                {pickedCount < 3 ? `Pick ${3 - pickedCount} more` : `Continue with ${pickedCount}`}
               </PrimaryButton>
             </div>
           </div>
@@ -623,7 +730,7 @@ export default function Setup() {
               />
             </div>
             <div className="mt-6 space-y-2">
-              <PrimaryButton disabled={tasks.length === 0} onClick={begin}>
+              <PrimaryButton disabled={pickedCount < 3} onClick={begin}>
                 Start tracking
               </PrimaryButton>
             </div>
@@ -649,7 +756,7 @@ export default function Setup() {
                 <h2 className="font-display text-lg font-semibold">Add a task</h2>
                 <div className="mt-4 space-y-5">
                   {TASK_CATALOG.map((cat) => {
-                    const existingIds = new Set(tasks.map((t) => t.taskId));
+                    const existingIds = new Set([...suggestions.map((s) => s.def.id), ...Object.keys(picked)]);
                     const available = cat.tasks.filter((t) => !existingIds.has(t.id));
                     if (available.length === 0) return null;
                     return (

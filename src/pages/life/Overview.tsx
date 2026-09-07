@@ -168,6 +168,11 @@ export default function Overview() {
             })()}
             I'm holding you to the person you said you want to become.
           </p>
+          {profile.dream.trim() && (
+            <p className="mt-2 text-sm font-medium leading-relaxed" style={{ color: "var(--color-ember)" }}>
+              North Star: “{profile.dream.trim()}”
+            </p>
+          )}
         </Card>
       )}
       <Card>

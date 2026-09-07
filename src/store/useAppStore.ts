@@ -28,6 +28,7 @@ import type {
   VentureLog,
   QuestPillar,
   QuizAnswers,
+  CheckInRecord,
   DevotionalSettings,
   CoachTone,
   CorrelationSnapshotEntry,
@@ -97,11 +98,15 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
     streaks: Array.isArray(p.streaks) ? p.streaks.map((h) => ({ ...h, mode: h.mode ?? "avoidance" })) : [],
     detoxHabits: Array.isArray(p.detoxHabits) ? p.detoxHabits : [],
     journal: p.journal ?? {},
+    checkins: p.checkins ?? {},
     income: Array.isArray(p.income) ? p.income : [],
     expenses: Array.isArray(p.expenses) ? p.expenses : [],
     budgetCategories:
       Array.isArray(p.budgetCategories) && p.budgetCategories.length > 0 ? p.budgetCategories : DEFAULT_BUDGET_CATEGORIES,
     aboutMe: p.aboutMe ?? "",
+    displayName: p.displayName ?? "",
+    dream: p.dream ?? "",
+    quiz: p.quiz ?? null,
     ventures: Array.isArray(p.ventures) && p.ventures.length > 0 ? p.ventures : ["Freelance", "Side project", "Other"],
     milestones: Array.isArray(p.milestones) ? p.milestones : [],
     tasks: Array.isArray(p.tasks)
@@ -136,6 +141,7 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
 const emptyProfile: UserProfile = {
   onboarded: false,
   displayName: "",
+  dream: "",
   aboutMe: "",
   quiz: null,
   resetType: null,
@@ -159,6 +165,7 @@ const emptyProfile: UserProfile = {
   pinnedFocusArea: null,
   lastGoalsReviewAt: null,
   milestones: [],
+  checkins: {},
   timeBlocks: {},
   ventureLogs: [],
   sleepLogs: [],
@@ -248,6 +255,9 @@ interface AppState {
   setDisplayName: (name: string) => void;
   /** Stores the curated onboarding answers (replaces any previous quiz). */
   setQuiz: (quiz: QuizAnswers) => void;
+  setDream: (dream: string) => void;
+  /** Saves this week's check-in (one per ISO week key, overwritten on redo). */
+  saveCheckIn: (entry: Omit<CheckInRecord, "createdAt">) => void;
   addVenture: (name: string) => void;
   removeVenture: (name: string) => void;
   removeBudgetCategory: (name: string) => void;
@@ -741,6 +751,22 @@ export const useAppStore = create<AppState>()(
 
       setQuiz: (quiz) => {
         set((s) => ({ profile: { ...s.profile, quiz } }));
+      },
+
+      setDream: (dream) => {
+        set((s) => ({ profile: { ...s.profile, dream: dream.trim().slice(0, 500) } }));
+      },
+
+      saveCheckIn: (entry) => {
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            checkins: {
+              ...s.profile.checkins,
+              [entry.weekKey]: { ...entry, createdAt: new Date().toISOString() },
+            },
+          },
+        }));
       },
 
       addVenture: (name) => {

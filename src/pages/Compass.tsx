@@ -3,13 +3,15 @@ import Overview from "@/pages/life/Overview";
 import Income from "@/pages/life/Income";
 import Goals from "@/pages/life/Goals";
 import Settings from "@/pages/life/Settings";
+import CheckIn from "@/pages/life/CheckIn";
 
-type SubTab = "overview" | "goals" | "finances" | "settings";
+type SubTab = "overview" | "goals" | "finances" | "checkin" | "settings";
 
 const TABS: { key: SubTab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "goals", label: "Goals" },
   { key: "finances", label: "Finances" },
+  { key: "checkin", label: "Check-in" },
   { key: "settings", label: "Settings" },
 ];
 
@@ -52,6 +54,7 @@ export default function Compass() {
         {sub === "overview" && <Overview />}
         {sub === "goals" && <Goals />}
         {sub === "finances" && <Income />}
+        {sub === "checkin" && <CheckIn />}
         {sub === "settings" && <Settings />}
       </div>
     </div>

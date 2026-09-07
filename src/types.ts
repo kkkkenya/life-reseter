@@ -244,6 +244,17 @@ export interface LifeAreaGoal {
   yearly: string;
 }
 
+export interface CheckInRecord {
+  weekKey: string; // ISO week key the check-in reviews
+  score: number; // 1-10, how the week went
+  wins: string;
+  miss: string;
+  obstacleHit: string; // obstacle value, or "none"
+  tweak: string; // one change for next week
+  focusNext: string; // next week's one-sentence focus
+  createdAt: string; // ISO datetime
+}
+
 export interface Milestone {
   id: string;
   achievedAt: string;
@@ -338,6 +349,8 @@ export interface UserProfile {
   onboarded: boolean;
   /** What the app calls them — best-friend basis for greetings and AI prompts. */
   displayName: string;
+  /** The no-limits 10-year dream, in their own words — the North Star. */
+  dream: string;
   aboutMe: string; // free-text "who you are / what you do / interests" — used to personalize AI-generated quests
   quiz: QuizAnswers | null;
   resetType: ResetType | null;
@@ -361,6 +374,7 @@ export interface UserProfile {
   pinnedFocusArea: LifeAreaKey | null;
   lastGoalsReviewAt: string | null; // ISO datetime, null = never reviewed
   milestones: Milestone[];
+  checkins: Record<string, CheckInRecord>; // ISO week key -> that week's check-in
   timeBlocks: Record<string, TimeBlock[]>; // ISO date -> blocks
   ventureLogs: VentureLog[];
   sleepLogs: SleepLog[];
