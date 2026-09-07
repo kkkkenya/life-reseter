@@ -27,6 +27,7 @@ import type {
   UserProfile,
   VentureLog,
   QuestPillar,
+  QuizAnswers,
   DevotionalSettings,
   CoachTone,
   CorrelationSnapshotEntry,
@@ -134,6 +135,7 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
 
 const emptyProfile: UserProfile = {
   onboarded: false,
+  displayName: "",
   aboutMe: "",
   quiz: null,
   resetType: null,
@@ -243,6 +245,9 @@ interface AppState {
   removeExpenseEntry: (id: string) => void;
   setBudgetCategory: (name: string, capKES: number) => void;
   setAboutMe: (text: string) => void;
+  setDisplayName: (name: string) => void;
+  /** Stores the curated onboarding answers (replaces any previous quiz). */
+  setQuiz: (quiz: QuizAnswers) => void;
   addVenture: (name: string) => void;
   removeVenture: (name: string) => void;
   removeBudgetCategory: (name: string) => void;
@@ -727,6 +732,15 @@ export const useAppStore = create<AppState>()(
 
       setAboutMe: (text) => {
         set((s) => ({ profile: { ...s.profile, aboutMe: text } }));
+      },
+
+      setDisplayName: (name) => {
+        const trimmed = name.trim().slice(0, 40);
+        set((s) => ({ profile: { ...s.profile, displayName: trimmed } }));
+      },
+
+      setQuiz: (quiz) => {
+        set((s) => ({ profile: { ...s.profile, quiz } }));
       },
 
       addVenture: (name) => {

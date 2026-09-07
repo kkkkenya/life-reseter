@@ -3,11 +3,12 @@ import { Loader2, Mic, X } from "lucide-react";
 import { getMediaBlob } from "@/lib/mediaStore";
 import type { JournalMediaRef } from "@/types";
 
-function useBlobUrl(id: string): string | null {
+function useBlobUrl(id: string, refreshKey = 0): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     let created: string | null = null;
+    setUrl(null);
     getMediaBlob(id)
       .then((blob) => {
         if (alive && blob) {
@@ -22,12 +23,12 @@ function useBlobUrl(id: string): string | null {
       alive = false;
       if (created) URL.revokeObjectURL(created);
     };
-  }, [id]);
+  }, [id, refreshKey]);
   return url;
 }
 
-function PhotoThumb({ ref, onOpen, onRemove }: { ref: JournalMediaRef; onOpen: () => void; onRemove: () => void }) {
-  const url = useBlobUrl(ref.id);
+function PhotoThumb({ ref, refreshKey, onOpen, onRemove }: { ref: JournalMediaRef; refreshKey: number; onOpen: () => void; onRemove: () => void }) {
+  const url = useBlobUrl(ref.id, refreshKey);
   if (!url) return null;
   return (
     <div className="relative">
@@ -48,16 +49,18 @@ function PhotoThumb({ ref, onOpen, onRemove }: { ref: JournalMediaRef; onOpen: (
 
 function AudioNote({
   ref,
+  refreshKey,
   onRemove,
   onTranscribe,
   transcribing,
 }: {
   ref: JournalMediaRef;
+  refreshKey: number;
   onRemove: () => void;
   onTranscribe: () => void;
   transcribing: boolean;
 }) {
-  const url = useBlobUrl(ref.id);
+  const url = useBlobUrl(ref.id, refreshKey);
   return (
     <div className="rounded-xl border p-2.5" style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}>
       <div className="flex items-center gap-2">
@@ -89,8 +92,8 @@ function AudioNote({
   );
 }
 
-function Lightbox({ id, onClose }: { id: string; onClose: () => void }) {
-  const url = useBlobUrl(id);
+function Lightbox({ id, refreshKey, onClose }: { id: string; refreshKey: number; onClose: () => void }) {
+  const url = useBlobUrl(id, refreshKey);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
@@ -110,11 +113,13 @@ function Lightbox({ id, onClose }: { id: string; onClose: () => void }) {
 
 export function JournalMediaGrid({
   media,
+  refreshKey,
   transcribingId,
   onRemove,
   onTranscribe,
 }: {
   media: JournalMediaRef[];
+  refreshKey: number;
   transcribingId: string | null;
   onRemove: (id: string) => void;
   onTranscribe: (ref: JournalMediaRef) => void;
@@ -128,7 +133,7 @@ export function JournalMediaGrid({
       {photos.length > 0 && (
         <div className="flex flex-wrap gap-2.5">
           {photos.map((m) => (
-            <PhotoThumb key={m.id} ref={m} onOpen={() => setLightbox(m.id)} onRemove={() => onRemove(m.id)} />
+            <PhotoThumb key={m.id} ref={m} refreshKey={refreshKey} onOpen={() => setLightbox(m.id)} onRemove={() => onRemove(m.id)} />
           ))}
         </div>
       )}
@@ -138,6 +143,7 @@ export function JournalMediaGrid({
             <AudioNote
               key={m.id}
               ref={m}
+              refreshKey={refreshKey}
               onRemove={() => onRemove(m.id)}
               onTranscribe={() => onTranscribe(m)}
               transcribing={transcribingId === m.id}
@@ -145,7 +151,7 @@ export function JournalMediaGrid({
           ))}
         </div>
       )}
-      {lightbox && <Lightbox id={lightbox} onClose={() => setLightbox(null)} />}
+      {lightbox && <Lightbox id={lightbox} refreshKey={refreshKey} onClose={() => setLightbox(null)} />}
     </div>
   );
 }

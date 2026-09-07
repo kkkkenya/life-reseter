@@ -37,6 +37,7 @@ import { coachVoice } from "@/data/coachTones";
 import { isoWeekKey } from "@/lib/isoWeek";
 import { buildWeeklySummaryContext } from "@/lib/weeklyReport";
 import WeeklyReview, { shouldShowWeeklyReview } from "@/pages/life/WeeklyReview";
+import { OBSTACLE_OPTIONS, SEASON_OPTIONS } from "@/lib/onboarding";
 
 export default function Overview() {
   const profile = useAppStore((s) => s.profile);
@@ -150,6 +151,25 @@ export default function Overview() {
 
   return (
     <div>
+      {profile.quiz && (profile.quiz.currentLife || profile.quiz.consistencyBarrier) && (
+        <Card className="mb-4" spineColor="var(--color-ember)">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ember)" }}>
+            In your own words
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed">
+            {profile.displayName.trim() ? `${profile.displayName.trim().split(/\s+/)[0]} came here ` : "You came here "}
+            {(() => {
+              const season = SEASON_OPTIONS.find((s) => s.value === profile.quiz?.currentLife);
+              return season ? `as ${season.label.toLowerCase()} — ${season.blurb.toLowerCase()}, ` : "";
+            })()}
+            {(() => {
+              const ob = OBSTACLE_OPTIONS.find((o) => o.value === profile.quiz?.consistencyBarrier);
+              return ob ? `knowing ${ob.label.toLowerCase()} gets in the way. ` : "";
+            })()}
+            I'm holding you to the person you said you want to become.
+          </p>
+        </Card>
+      )}
       <Card>
         <div className="flex items-center justify-between">
           <div>

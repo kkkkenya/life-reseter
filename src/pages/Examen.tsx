@@ -19,6 +19,7 @@ export default function Examen({ onBack }: { onBack?: () => void }) {
   const todayIso = new Date().toISOString().slice(0, 10);
   const gospel = profile.dailyGospel[todayIso];
   const devotional = profile.devotional;
+  const firstName = profile.displayName.trim().split(/\s+/)[0] || "";
 
   useEffect(() => {
     if (!devotional.enabled) return;
@@ -29,7 +30,8 @@ export default function Examen({ onBack }: { onBack?: () => void }) {
       setReflecting(true);
       askGemini(`Verse: "${verse.text}" (${verse.ref})`, {
         systemInstruction:
-          "You are a Catholic reflection companion. In 2 sentences, tie this Gospel verse to daily discipline and self-mastery. Reverent, plain language, no cliches.",
+          `You are a Catholic reflection companion writing for ${firstName || "a friend"} working on becoming their best self. ` +
+          "In 2 sentences, tie this Gospel verse to daily discipline and self-mastery. Warm and direct, like a best friend who refuses to let them settle. Reverent, plain language, no cliches.",
         temperature: 0.7,
         maxOutputTokens: 120,
       })
@@ -52,7 +54,7 @@ export default function Examen({ onBack }: { onBack?: () => void }) {
         </div>
       </div>
       <p className="mt-1 text-sm" style={{ color: "var(--color-ink-dim)" }}>
-        Look back before you look ahead.
+        {firstName ? `Slow down, ${firstName}. Look back before you look ahead.` : "Look back before you look ahead."}
       </p>
 
       {devotional.enabled && gospel && (

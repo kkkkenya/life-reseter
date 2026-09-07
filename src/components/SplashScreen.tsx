@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAppStore } from "@/store/useAppStore";
 import { getSweetGreeting } from "@/lib/sweetWords";
 
 const LETTERS = ["R", "E", "S", "E", "T"];
@@ -8,6 +9,8 @@ const EXIT_MS = 450;
 export default function SplashScreen({ onDone }: { onDone: () => void }) {
   const [leaving, setLeaving] = useState(false);
   const sweet = useMemo(() => getSweetGreeting(new Date()), []);
+  const displayName = useAppStore((s) => s.profile.displayName);
+  const firstName = displayName.trim().split(/\s+/)[0] || "";
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -85,7 +88,7 @@ export default function SplashScreen({ onDone }: { onDone: () => void }) {
         </div>
 
         {/* ---- Wordmark ---- */}
-        <p className="splash-hello">{sweet.greeting} ☀️</p>
+        <p className="splash-hello">{sweet.greeting}{firstName ? `, ${firstName}` : ""} ☀️</p>
         <h1 className="splash-title font-display" aria-label="RESET">
           {LETTERS.map((ch, i) => (
             <span key={i} className="splash-letter" style={{ animationDelay: `${0.35 + i * 0.07}s` }}>

@@ -163,13 +163,14 @@ export default function Today({
 
   const review = profile.dailyReview[todayIso];
   const sweet = getSweetGreeting(new Date(), todayIso);
+  const firstName = profile.displayName.trim().split(/\s+/)[0] || "";
 
   return (
     <div className="mx-auto max-w-md px-5 pb-28 pt-14">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
-            {sweet.greeting} ☀️
+            {sweet.greeting}{firstName ? `, ${firstName}` : ""} ☀️
           </p>
           <h1 className="font-display text-2xl font-semibold">Day {viewDay}</h1>
           <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>

@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, PrimaryButton, GhostButton } from "@/components/ui";
 import { JournalMediaGrid } from "@/components/JournalMedia";
 import { useAppStore } from "@/store/useAppStore";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { programDayFromDate, dateFromProgramDay, formatShortDate } from "@/lib/planGenerator";
 import {
   MAX_AUDIO_PER_ENTRY,
@@ -14,6 +15,12 @@ import {
   newMediaId,
   saveMediaBlob,
 } from "@/lib/mediaStore";
+import {
+  collectJournalMedia,
+  deleteRemoteMedia,
+  downloadMediaBlob,
+  uploadMediaBlob,
+} from "@/lib/mediaSync";
 import type { JournalMediaRef } from "@/types";
 import { Camera, Check, ChevronDown, ImagePlus, Mic, Sparkles, Square } from "lucide-react";
 
@@ -56,6 +63,60 @@ export default function Journal() {
   const [recSession, setRecSession] = useState<{ finish: () => Promise<{ base64: string; mimeType: string }> } | null>(null);
   const recStartedAt = useRef<number>(0);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
+
+  const { userId } = useSupabaseAuth();
+  const [mediaTick, setMediaTick] = useState(0);
+  const uploadingRef = useRef<Set<string>>(new Set());
+
+  // Cloud media sync (signed in only): push new local blobs up, pull down
+  // anything this device is missing. Refs ride the normal profile sync, so
+  // the other device already knows *what* to fetch.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      const markRemote = (day: number, id: string) => {
+        const cur = useAppStore.getState().profile.journal[day];
+        if (!cur) return;
+        saveJournalEntry(day, {
+          media: (cur.media ?? []).map((m) => (m.id === id ? { ...m, remote: true } : m)),
+        });
+        if (day === todayDay) {
+          setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, remote: true } : m)));
+        }
+      };
+      for (const { day, ref } of collectJournalMedia(useAppStore.getState().profile)) {
+        if (cancelled || ref.remote || uploadingRef.current.has(ref.id)) continue;
+        uploadingRef.current.add(ref.id);
+        try {
+          await uploadMediaBlob(userId, ref);
+          if (!cancelled) markRemote(day, ref.id);
+        } catch {
+          /* offline or gone — retry on next visit */
+        } finally {
+          uploadingRef.current.delete(ref.id);
+        }
+      }
+      let fetchedAny = false;
+      for (const { ref } of collectJournalMedia(useAppStore.getState().profile)) {
+        if (cancelled) continue;
+        try {
+          const local = await getMediaBlob(ref.id);
+          if (!local && ref.remote) {
+            await downloadMediaBlob(userId, ref);
+            fetchedAny = true;
+          }
+        } catch {
+          /* offline — try later */
+        }
+      }
+      if (fetchedAny && !cancelled) setMediaTick((t) => t + 1);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, media]);
 
   const [examenOpen, setExamenOpen] = useState(Boolean(existing?.examen));
   const [noticedGod, setNoticedGod] = useState(existing?.examen?.noticedGod ?? "");
@@ -145,7 +206,9 @@ export default function Journal() {
 
   async function handleRemoveMedia(id: string) {
     if (!confirm("Remove this attachment?")) return;
+    const wasRemote = media.find((m) => m.id === id)?.remote;
     persistMedia(media.filter((m) => m.id !== id));
+    if (wasRemote && userId) void deleteRemoteMedia(userId, id);
     try {
       await deleteMediaBlob(id);
     } catch {
@@ -191,9 +254,10 @@ export default function Journal() {
     setReflecting(true);
     setReflectError(null);
     try {
-      const prompt = `Here's my reflection for today:\nWent well: ${wentWell || "(nothing noted)"}\nCould improve: ${couldImprove || "(nothing noted)"}\nTomorrow's win: ${tomorrowWin || "(nothing noted)"}\nMood: ${mood}/10`;
+      const who = profile.displayName.trim() ? `${profile.displayName.trim().split(/\s+/)[0]}'s` : "my";
+      const prompt = `Here's ${who} reflection for today:\nWent well: ${wentWell || "(nothing noted)"}\nCould improve: ${couldImprove || "(nothing noted)"}\nTomorrow's win: ${tomorrowWin || "(nothing noted)"}\nMood: ${mood}/10`;
       const text = await askGemini(prompt, {
-        systemInstruction: `${coachVoice(profile.coachTone)} Respond in 2-4 sentences to this journal entry. Don't just validate — if something in the entry deserves a pointed follow-up question or a push, give it.`,
+        systemInstruction: `${coachVoice(profile.coachTone)} Respond in 2-4 sentences to this journal entry like a best friend who wants them to become their best self — warm, in their corner, but unwilling to let them slide. Don't just validate — if something in the entry deserves a pointed follow-up question or a push, give it.`,
         temperature: 0.7,
         maxOutputTokens: 200,
       });
@@ -307,10 +371,16 @@ export default function Journal() {
         <div className="mt-5">
           <p className="mb-1.5 text-sm font-medium">Pages & voice notes</p>
           <p className="mb-2 text-xs" style={{ color: "var(--color-ink-dim)" }}>
-            Snap handwritten pages or talk it out instead of typing. Media stays on this device.
+            Snap handwritten pages or talk it out instead of typing.{" "}
+            {userId
+              ? media.some((m) => !m.remote)
+                ? "Backing up to your private cloud…"
+                : "Backed up to your private cloud — follows you across devices."
+              : "Stays on this device until you sign in."}
           </p>
           <JournalMediaGrid
             media={media}
+            refreshKey={mediaTick}
             transcribingId={transcribingId}
             onRemove={handleRemoveMedia}
             onTranscribe={handleTranscribe}

@@ -205,6 +205,9 @@ export interface JournalMediaRef {
   kind: "photo" | "audio";
   createdAt: string; // ISO datetime
   durationSec?: number; // audio only, best-effort
+  /** True once the blob is backed up to the user's private Supabase Storage
+   *  folder. Synced inside the profile JSON so other devices know to pull it. */
+  remote?: boolean;
 }
 
 export interface IncomeEntry {
@@ -333,6 +336,8 @@ export interface IncomeGoal {
 
 export interface UserProfile {
   onboarded: boolean;
+  /** What the app calls them — best-friend basis for greetings and AI prompts. */
+  displayName: string;
   aboutMe: string; // free-text "who you are / what you do / interests" — used to personalize AI-generated quests
   quiz: QuizAnswers | null;
   resetType: ResetType | null;
