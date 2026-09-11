@@ -1,4 +1,4 @@
-import type { LifeAreaKey, LifeAreaGoal, ObjectiveHorizon } from "@/types";
+import type { LifeAreaKey, LifeAreaGoal, GoalTarget, ObjectiveHorizon } from "@/types";
 
 export interface LifeAreaInfo {
   key: LifeAreaKey;
@@ -30,15 +30,23 @@ export const OBJECTIVE_HORIZONS: { key: ObjectiveHorizon; label: string }[] = [
   { key: "yearly", label: "1 Year" },
 ];
 
+export const emptyGoalTarget: GoalTarget = {
+  label: "",
+  targetValue: 0,
+  currentValue: 0,
+  unit: "",
+  achievedAt: null,
+};
+
 const emptyGoal: LifeAreaGoal = {
   why: "",
-  daily: "",
+  daily: { ...emptyGoalTarget },
   dailyLinkType: "none",
   dailyLinkId: "",
-  weekly: "",
-  monthly: "",
-  sixMonth: "",
-  yearly: "",
+  weekly: { ...emptyGoalTarget },
+  monthly: { ...emptyGoalTarget },
+  sixMonth: { ...emptyGoalTarget },
+  yearly: { ...emptyGoalTarget },
 };
 
 export const EMPTY_GOALS: Record<LifeAreaKey, LifeAreaGoal> = {

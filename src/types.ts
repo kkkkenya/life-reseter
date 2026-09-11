@@ -233,15 +233,29 @@ export interface BudgetCategory {
 
 export type ObjectiveHorizon = "daily" | "weekly" | "monthly" | "sixMonth" | "yearly";
 
+/**
+ * A single measurable objective for one horizon (daily/weekly/1mo/6mo/1yr) within a life
+ * area. `achievedAt` reflects the CURRENT met/unmet state (set when currentValue first
+ * reaches targetValue, cleared if it later drops below) — it's not just a historical flag,
+ * so the UI can trust it live. Each fresh crossing from unmet -> met fires one milestone.
+ */
+export interface GoalTarget {
+  label: string; // what you're aiming for, e.g. "Push-ups" or "Save for laptop"
+  targetValue: number; // 0 = no numeric target set yet
+  currentValue: number;
+  unit: string; // free text, e.g. "reps", "KES", "hrs" — "" if not applicable
+  achievedAt: string | null; // ISO datetime target was last newly met, else null
+}
+
 export interface LifeAreaGoal {
   why: string;
-  daily: string;
+  daily: GoalTarget;
   dailyLinkType: "none" | "task" | "streak";
   dailyLinkId: string; // taskUid or streak id; "" when linkType is "none"
-  weekly: string;
-  monthly: string;
-  sixMonth: string;
-  yearly: string;
+  weekly: GoalTarget;
+  monthly: GoalTarget;
+  sixMonth: GoalTarget;
+  yearly: GoalTarget;
 }
 
 export interface CheckInRecord {

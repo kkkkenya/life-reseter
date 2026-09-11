@@ -1,20 +1,21 @@
 import { useState } from "react";
 import { resolveIcon } from "@/components/iconMap";
 import { Card } from "@/components/ui";
+import { GoalTargetEditor } from "@/components/GoalTargetEditor";
 import { useAppStore } from "@/store/useAppStore";
 import { LIFE_AREAS, OBJECTIVE_HORIZONS, type LifeAreaInfo } from "@/data/lifeAreas";
 import { AreaRing } from "@/components/Gauge";
-import { ChevronDown, Check, Star, Link2 } from "lucide-react";
+import { ChevronDown, Star, Link2 } from "lucide-react";
 import { GoalLinkPickerSheet, type GoalLinkPick } from "@/pages/life/GoalLinkPickerSheet";
 import { goalDailyEvidence, formatGoalEvidenceText } from "@/lib/goalEvidence";
-import type { LifeAreaGoal, LifeAreaKey, UserProfile } from "@/types";
+import type { LifeAreaGoal, LifeAreaKey, ObjectiveHorizon, GoalTarget, UserProfile } from "@/types";
 
 function IconFor({ name, size = 16, color }: { name: string; size?: number; color?: string }) {
   const Cmp = resolveIcon(name);
   return <Cmp size={size} color={color} />;
 }
 
-/** Below the free-text daily input: link status/evidence chip, or a prompt to link one. */
+/** Below the daily target editor: link status/evidence chip, or a prompt to link one. */
 function DailyLinkRow({
   area,
   goal,
@@ -86,6 +87,13 @@ function DailyLinkRow({
   );
 }
 
+/** Mean progress (0-1) across horizons that actually have a target set; 0 if none do. */
+function areaProgress(goal: LifeAreaGoal): number {
+  const targets = OBJECTIVE_HORIZONS.map((h) => goal[h.key]).filter((t) => t.targetValue > 0);
+  if (targets.length === 0) return 0;
+  return targets.reduce((sum, t) => sum + Math.min(1, t.currentValue / t.targetValue), 0) / targets.length;
+}
+
 export default function Goals() {
   const profile = useAppStore((s) => s.profile);
   const goals = profile.goals;
@@ -94,24 +102,22 @@ export default function Goals() {
   const setGoalDailyLink = useAppStore((s) => s.setGoalDailyLink);
   const pinnedFocusArea = profile.pinnedFocusArea;
   const setPinnedFocusArea = useAppStore((s) => s.setPinnedFocusArea);
-  const addMilestone = useAppStore((s) => s.addMilestone);
   const [openArea, setOpenArea] = useState<string | null>(LIFE_AREAS[0].key);
-  const [justMarked, setJustMarked] = useState<string | null>(null);
   const [linkPickerArea, setLinkPickerArea] = useState<LifeAreaKey | null>(null);
 
   return (
     <div>
       <p className="mb-4 text-sm" style={{ color: "var(--color-ink-dim)" }}>
-        Daily, weekly, 1 month, 6 months, 1 year — per life area. Mark one achieved and it
-        lands in your milestone tracker.
+        Daily, weekly, 1 month, 6 months, 1 year — per life area. Give each a number and a
+        target and the progress bar tracks itself; hit it and it lands in your milestone tracker.
       </p>
       <div className="space-y-3">
         {LIFE_AREAS.map((area) => {
           const isOpen = openArea === area.key;
           const isPinned = pinnedFocusArea === area.key;
           const g = goals[area.key];
-          const filledCount = OBJECTIVE_HORIZONS.filter((h) => g[h.key]).length;
-          const pct = filledCount / OBJECTIVE_HORIZONS.length;
+          const targetsSet = OBJECTIVE_HORIZONS.filter((h) => g[h.key].targetValue > 0).length;
+          const pct = areaProgress(g);
           return (
             <Card
               key={area.key}
@@ -132,7 +138,7 @@ export default function Goals() {
                     <div>
                       <p className="text-sm font-medium">{area.label}</p>
                       <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
-                        {filledCount}/{OBJECTIVE_HORIZONS.length} set
+                        {targetsSet === 0 ? "No targets set" : `${targetsSet}/${OBJECTIVE_HORIZONS.length} targets set`}
                       </p>
                     </div>
                   </div>
@@ -170,53 +176,28 @@ export default function Goals() {
                       style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
                     />
                   </div>
-                  {OBJECTIVE_HORIZONS.map((h) => {
-                    const markKey = `${area.key}-${h.key}`;
-                    return (
-                      <div key={h.key}>
-                        <p className="mb-1 text-xs font-medium" style={{ color: "var(--color-ink-dim)" }}>
-                          {h.label}
-                        </p>
-                        <div className="flex gap-2">
-                          <input
-                            value={g[h.key]}
-                            onChange={(e) => setGoal(area.key, h.key, e.target.value)}
-                            placeholder={`${h.label} goal for ${area.shortLabel.toLowerCase()}...`}
-                            className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
-                            style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
-                          />
-                          <button
-                            disabled={!g[h.key]}
-                            onClick={() => {
-                              addMilestone(
-                                `${h.label} goal achieved — ${area.shortLabel}`,
-                                g[h.key]
-                              );
-                              setJustMarked(markKey);
-                              setTimeout(() => setJustMarked(null), 1500);
-                            }}
-                            className="flex w-11 shrink-0 items-center justify-center rounded-xl disabled:opacity-30"
-                            style={{
-                              background: justMarked === markKey ? "var(--color-good)" : "var(--color-surface-raised)",
-                              border: "1px solid var(--color-line)",
-                            }}
-                            aria-label={`Mark ${h.label} goal achieved`}
-                          >
-                            <Check size={15} color={justMarked === markKey ? "#fbf3e7" : "var(--color-ink-dim)"} />
-                          </button>
-                        </div>
-                        {h.key === "daily" && (
-                          <DailyLinkRow
-                            area={area}
-                            goal={g}
-                            profile={profile}
-                            onOpenPicker={() => setLinkPickerArea(area.key)}
-                            onClear={() => setGoalDailyLink(area.key, "none", "")}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
+                  {OBJECTIVE_HORIZONS.map((h) => (
+                    <div key={h.key}>
+                      <p className="mb-1 text-xs font-medium" style={{ color: "var(--color-ink-dim)" }}>
+                        {h.label}
+                      </p>
+                      <GoalTargetEditor
+                        value={g[h.key]}
+                        onChange={(patch: Partial<GoalTarget>) => setGoal(area.key, h.key as ObjectiveHorizon, patch)}
+                        accent={area.color}
+                        labelPlaceholder={`${h.label} goal for ${area.shortLabel.toLowerCase()}...`}
+                      />
+                      {h.key === "daily" && (
+                        <DailyLinkRow
+                          area={area}
+                          goal={g}
+                          profile={profile}
+                          onOpenPicker={() => setLinkPickerArea(area.key)}
+                          onClear={() => setGoalDailyLink(area.key, "none", "")}
+                        />
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </Card>

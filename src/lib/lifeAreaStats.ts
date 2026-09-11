@@ -121,14 +121,32 @@ export function lifeAreaCompletion(profile: UserProfile): Record<LifeAreaKey, Li
   return out;
 }
 
-/** Fraction (0-1) of the 5 goal-horizon fields (daily/weekly/monthly/6mo/yearly) that have real text in them, per area. */
-export function goalFillRate(profile: UserProfile): Record<LifeAreaKey, number> {
+/**
+ * Mean progress (0-1) across whichever of the 5 goal horizons have a real numeric
+ * target set, per life area. Horizons with no target (targetValue 0) don't count
+ * toward the average — an area with nothing set yet reads as 0, not skewed by empty slots.
+ */
+export function goalProgress(profile: UserProfile): Record<LifeAreaKey, number> {
   const out = {} as Record<LifeAreaKey, number>;
   (Object.keys(profile.goals) as LifeAreaKey[]).forEach((key) => {
     const g = profile.goals[key];
-    const fields = [g.daily, g.weekly, g.monthly, g.sixMonth, g.yearly];
-    const filled = fields.filter((f) => f.trim().length > 0).length;
-    out[key] = filled / fields.length;
+    const targets = [g.daily, g.weekly, g.monthly, g.sixMonth, g.yearly].filter((t) => t.targetValue > 0);
+    if (targets.length === 0) {
+      out[key] = 0;
+      return;
+    }
+    const sum = targets.reduce((acc, t) => acc + Math.min(1, t.currentValue / t.targetValue), 0);
+    out[key] = sum / targets.length;
+  });
+  return out;
+}
+
+/** Count of the 5 goal horizons (daily/weekly/monthly/6mo/yearly) that have a numeric target set, per area. */
+export function goalTargetsSetCount(profile: UserProfile): Record<LifeAreaKey, number> {
+  const out = {} as Record<LifeAreaKey, number>;
+  (Object.keys(profile.goals) as LifeAreaKey[]).forEach((key) => {
+    const g = profile.goals[key];
+    out[key] = [g.daily, g.weekly, g.monthly, g.sixMonth, g.yearly].filter((t) => t.targetValue > 0).length;
   });
   return out;
 }

@@ -9,7 +9,7 @@ import type {
   BudgetCategory,
   JournalEntry,
   LifeAreaKey,
-  LifeAreaGoal,
+  GoalTarget,
   MitEntry,
   ObjectiveHorizon,
   PlannedTask,
@@ -38,7 +38,7 @@ import type {
 import { isoWeekKey } from "@/lib/isoWeek";
 import { buildCalendar, distributeWeekdays, xpForTask, programDayFromDate } from "@/lib/planGenerator";
 import { RANK_TIERS } from "@/types";
-import { EMPTY_GOALS } from "@/data/lifeAreas";
+import { EMPTY_GOALS, emptyGoalTarget, getLifeArea, OBJECTIVE_HORIZONS } from "@/data/lifeAreas";
 import { STREAK_TEMPLATES } from "@/data/streakDefaults";
 import { evaluateMilestones } from "@/lib/milestones";
 import { DEFAULT_QUEST_PILLARS } from "@/data/questPillars";
@@ -78,6 +78,26 @@ function migrateIncomeGoal(raw: unknown): IncomeGoal {
 }
 
 /**
+ * Handles the pre-redesign shape (a plain string per horizon) some old saves have.
+ * Old free text becomes the new target's label so nothing typed is lost; numeric
+ * fields start at 0 until the person sets a real target.
+ */
+function migrateGoalTarget(raw: unknown): GoalTarget {
+  if (typeof raw === "string") return { ...emptyGoalTarget, label: raw };
+  if (raw && typeof raw === "object") {
+    const g = raw as Partial<GoalTarget>;
+    return {
+      label: typeof g.label === "string" ? g.label : "",
+      targetValue: typeof g.targetValue === "number" && g.targetValue >= 0 ? g.targetValue : 0,
+      currentValue: typeof g.currentValue === "number" && g.currentValue >= 0 ? g.currentValue : 0,
+      unit: typeof g.unit === "string" ? g.unit : "",
+      achievedAt: typeof g.achievedAt === "string" ? g.achievedAt : null,
+    };
+  }
+  return { ...emptyGoalTarget };
+}
+
+/**
  * Repairs a profile blob that may be missing fields added in later app versions
  * (e.g. an old localStorage snapshot, or an older row pulled from Supabase).
  * `base` supplies safe fallbacks for anything missing/malformed in `p`.
@@ -90,8 +110,22 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
     goals: (() => {
       const merged = { ...EMPTY_GOALS };
       (Object.keys(EMPTY_GOALS) as LifeAreaKey[]).forEach((key) => {
-        const saved = (p.goals as Record<string, Partial<LifeAreaGoal>> | undefined)?.[key];
-        merged[key] = { ...EMPTY_GOALS[key], ...base.goals[key], ...(saved ?? {}) };
+        const saved = (p.goals as Record<string, Record<string, unknown>> | undefined)?.[key];
+        const b = base.goals[key];
+        const s = saved ?? {};
+        merged[key] = {
+          why: typeof s.why === "string" ? s.why : b.why,
+          daily: migrateGoalTarget(s.daily ?? b.daily),
+          dailyLinkType:
+            s.dailyLinkType === "task" || s.dailyLinkType === "streak"
+              ? s.dailyLinkType
+              : b.dailyLinkType,
+          dailyLinkId: typeof s.dailyLinkId === "string" ? s.dailyLinkId : b.dailyLinkId,
+          weekly: migrateGoalTarget(s.weekly ?? b.weekly),
+          monthly: migrateGoalTarget(s.monthly ?? b.monthly),
+          sixMonth: migrateGoalTarget(s.sixMonth ?? b.sixMonth),
+          yearly: migrateGoalTarget(s.yearly ?? b.yearly),
+        };
       });
       return merged;
     })(),
@@ -272,7 +306,7 @@ interface AppState {
   addVenture: (name: string) => void;
   removeVenture: (name: string) => void;
   removeBudgetCategory: (name: string) => void;
-  setGoal: (lifeArea: LifeAreaKey, horizon: ObjectiveHorizon, text: string) => void;
+  setGoal: (lifeArea: LifeAreaKey, horizon: ObjectiveHorizon, patch: Partial<GoalTarget>) => void;
   setGoalWhy: (lifeArea: LifeAreaKey, why: string) => void;
   setGoalDailyLink: (lifeArea: LifeAreaKey, linkType: "none" | "task" | "streak", linkId: string) => void;
   setPinnedFocusArea: (area: LifeAreaKey | null) => void;
@@ -836,16 +870,38 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ profile: { ...s.profile, ventures: s.profile.ventures.filter((v) => v !== name) } }));
       },
 
-      setGoal: (lifeArea, horizon, text) => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            goals: {
-              ...s.profile.goals,
-              [lifeArea]: { ...s.profile.goals[lifeArea], [horizon]: text },
+      setGoal: (lifeArea, horizon, patch) => {
+        set((s) => {
+          const before = s.profile.goals[lifeArea][horizon];
+          const updated: GoalTarget = { ...before, ...patch };
+          const metNow = updated.targetValue > 0 && updated.currentValue >= updated.targetValue;
+          const wasMet = !!before.achievedAt;
+          updated.achievedAt = metNow ? before.achievedAt ?? nowIso() : null;
+
+          let milestones = s.profile.milestones;
+          if (metNow && !wasMet) {
+            const area = getLifeArea(lifeArea);
+            const horizonLabel = OBJECTIVE_HORIZONS.find((h) => h.key === horizon)?.label ?? horizon;
+            const amount = `${updated.currentValue}${updated.unit ? " " + updated.unit : ""} / ${updated.targetValue}${updated.unit ? " " + updated.unit : ""}`;
+            milestones = [
+              ...milestones,
+              {
+                id: `goal-${lifeArea}-${horizon}-${Date.now()}`,
+                achievedAt: nowIso(),
+                label: `${horizonLabel} goal hit — ${area.shortLabel}`,
+                description: updated.label ? `${updated.label}: ${amount}` : amount,
+              },
+            ];
+          }
+
+          return {
+            profile: {
+              ...s.profile,
+              goals: { ...s.profile.goals, [lifeArea]: { ...s.profile.goals[lifeArea], [horizon]: updated } },
+              milestones,
             },
-          },
-        }));
+          };
+        });
       },
 
       setGoalWhy: (lifeArea, why) => {
