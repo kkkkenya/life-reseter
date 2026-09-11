@@ -93,6 +93,31 @@ function asIsFree(v: unknown): boolean | null {
   return null;
 }
 
+/**
+ * The model is told never to invent URLs, but nothing stops it from doing so anyway —
+ * so every AI-picked link gets checked for real before it reaches the UI. HEAD first
+ * (cheap); some hosts reject HEAD outright, so a GET is the fallback rather than the
+ * verdict. Anything that doesn't resolve within the timeout loses its link, not its
+ * spot in the feed — the event still shows, just without a dead "Details" button.
+ */
+async function verifyUrl(url: string, timeoutMs = 3000): Promise<boolean> {
+  const opts = { redirect: "follow" as const, headers: { "User-Agent": "life-reset-events/1.0" } };
+  for (const method of ["HEAD", "GET"] as const) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...opts, method, signal: ctrl.signal });
+      clearTimeout(timer);
+      if (res.status === 405 || res.status === 501) continue; // method rejected fast — retry with GET
+      return res.ok || (res.status >= 300 && res.status < 400);
+    } catch {
+      clearTimeout(timer);
+      return false; // real timeout/network failure — one attempt is enough, don't double the wait
+    }
+  }
+  return false;
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -188,6 +213,14 @@ export default async function handler(req: any, res: any) {
       });
     }
     events.sort((a, b) => `${a.date} ${a.startTime ?? ""}`.localeCompare(`${b.date} ${b.endTime ?? ""}`));
+
+    await Promise.all(
+      events.map(async (e) => {
+        if (!e.url) return;
+        const ok = await verifyUrl(e.url).catch(() => false);
+        if (!ok) e.url = null;
+      })
+    );
 
     res.status(200).json({ events, hubs: HUBS, source: "gemini" });
   } catch {

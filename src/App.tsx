@@ -22,30 +22,64 @@ import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { playTap } from "@/lib/sound";
 
 function GoogleDot() {
-  const { configured, connected, busy, connect, disconnect } = useGoogleCalendar();
-  if (!configured) return null;
+  const { configured, connected, busy, error, connect, disconnect } = useGoogleCalendar();
+  const [showNote, setShowNote] = useState(false);
+
+  useEffect(() => {
+    if (!error) return;
+    setShowNote(true);
+    const t = window.setTimeout(() => setShowNote(false), 7000);
+    return () => window.clearTimeout(t);
+  }, [error]);
+
+  const note = !configured
+    ? "Google Calendar isn't set up on this deploy (missing VITE_GOOGLE_CLIENT_ID env var)."
+    : error;
+
   return (
-    <button
-      onClick={() => {
-        if (connected) {
-          if (confirm("Disconnect Google Calendar on this device?")) disconnect();
-        } else {
-          void connect();
-        }
-      }}
-      aria-label={connected ? "Google Calendar connected — tap to disconnect" : "Connect Google Calendar"}
-      title={connected ? "Google Calendar connected" : "Connect Google Calendar"}
-      className="flex h-8 items-center gap-1.5 rounded-lg px-2"
-      style={{ background: "var(--color-surface)" }}
-    >
-      <span
-        className="h-2.5 w-2.5 rounded-full"
-        style={{ background: connected ? "var(--color-good)" : "var(--color-bad)", opacity: busy ? 0.5 : 1 }}
-      />
-      <span className="text-[10px] font-semibold" style={{ color: "var(--color-ink-dim)" }}>
-        GCal
-      </span>
-    </button>
+    <div className="relative">
+      <button
+        onClick={() => {
+          if (!configured) {
+            setShowNote((s) => !s);
+            return;
+          }
+          if (connected) {
+            if (confirm("Disconnect Google Calendar on this device?")) disconnect();
+          } else {
+            void connect();
+          }
+        }}
+        aria-label={connected ? "Google Calendar connected — tap to disconnect" : note ?? "Connect Google Calendar"}
+        title={connected ? "Google Calendar connected" : note ?? "Connect Google Calendar"}
+        className="flex h-8 items-center gap-1.5 rounded-lg px-2"
+        style={{ background: "var(--color-surface)", opacity: configured ? 1 : 0.6 }}
+      >
+        <span
+          className="h-2.5 w-2.5 rounded-full"
+          style={{
+            background: !configured ? "var(--color-ink-faint)" : connected ? "var(--color-good)" : "var(--color-bad)",
+            opacity: busy ? 0.5 : 1,
+          }}
+        />
+        <span className="text-[10px] font-semibold" style={{ color: "var(--color-ink-dim)" }}>
+          GCal
+        </span>
+      </button>
+      {showNote && note && (
+        <div
+          className="absolute right-0 top-full z-50 mt-1.5 w-56 rounded-xl border px-3 py-2 text-xs leading-snug"
+          style={{
+            borderColor: "var(--color-line)",
+            background: "var(--color-surface)",
+            color: "var(--color-ink-dim)",
+            boxShadow: "var(--shadow-floating)",
+          }}
+        >
+          {note}
+        </div>
+      )}
+    </div>
   );
 }
 
