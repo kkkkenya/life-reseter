@@ -280,7 +280,7 @@ export default function Streaks({ onBack }: { onBack?: () => void }) {
   const canCreate = mode === "avoidance" ? label.trim().length > 0 : Boolean(linkedTaskUid);
 
   return (
-    <div className="mx-auto max-w-md px-5 pb-28 pt-14">
+    <div className="mx-auto w-full max-w-md px-5 pb-28 pt-14 lg:max-w-3xl lg:px-10 lg:pb-16">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {onBack && <BackButton onClick={onBack} />}

@@ -1,4 +1,5 @@
 import { isValidIsoDate } from "./parseEvent";
+import { recordSourceHealth } from "./eventHealth";
 
 export interface TechEvent {
   title: string;
@@ -60,6 +61,14 @@ const SAVED_KEY = "life-reset-saved-events";
 
 export function eventKey(ev: Pick<TechEvent, "title" | "date">): string {
   return `${ev.title.toLowerCase()}|${ev.date}`;
+}
+
+/** Link to the .ics export of this week's feed. `download` forces a file save
+ *  instead of the browser handing it to the calendar app (webcal/import). */
+export function icsUrl(weekStart: string, weekEnd: string, download = false): string {
+  const q = new URLSearchParams({ weekStart, weekEnd });
+  if (download) q.set("download", "1");
+  return `/api/weekly-ics?${q.toString()}`;
 }
 
 /** Bookmarks live in their own localStorage key (not the synced profile blob):
@@ -167,9 +176,12 @@ function toTechEventList(raw: unknown, weekStart: string, weekEnd: string): Tech
   if (!Array.isArray(raw)) return [];
   return (raw as Record<string, unknown>[])
     .map(normalizeEvent)
-    .filter(
-      (e): e is TechEvent => e !== null && e.date >= weekStart && e.date <= weekEnd
-    );
+    .filter((e): e is TechEvent => {
+      if (e === null) return false;
+      // Keep multi-day events that merely *span* this week, not only ones that start in it.
+      const end = e.endDate && e.endDate > e.date ? e.endDate : e.date;
+      return e.date <= weekEnd && end >= weekStart;
+    });
 }
 
 export async function fetchTechEvents(force = false): Promise<TechEventsResult> {
@@ -221,6 +233,7 @@ export async function fetchTechEvents(force = false): Promise<TechEventsResult> 
     source: "direct",
     fetchedAt: new Date().toISOString(),
   };
+  recordSourceHealth(result.sources, result.fetchedAt);
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({ key: `${weekStart}|${weekEnd}`, at: Date.now(), data: result }));
   } catch {

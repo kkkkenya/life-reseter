@@ -200,7 +200,7 @@ export default function Today({
   }
 
   return (
-    <div className="mx-auto max-w-md px-5 pb-28 pt-14">
+    <div className="mx-auto w-full max-w-md px-5 pb-28 pt-14 lg:max-w-3xl lg:px-10 lg:pb-16">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>

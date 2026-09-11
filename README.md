@@ -209,6 +209,62 @@ the browser asks. Two real-world caveats:
   (Share → Add to Home Screen), not to a regular Safari tab, as of iOS 16.4+. Desktop and
   Android Chrome/Firefox/Edge work in a normal browser tab, no install needed.
 
+## Tech events — sources, directory & calendar subscribe
+
+The **Events** tab ("Tech this week") covers Kenya in-person events plus online
+hackathons, clearly badges anything that came from the AI fill, and adds a
+directory of every org worth checking by hand.
+
+**One registry, two uses.** Every source lives in a single file,
+`src/lib/eventSources.ts`. The fetchers read it, and the directory column in the
+UI renders the same list — so one entry adds a source to both. An entry with a
+`fetch` block is pulled automatically; an entry without one is a hand-browse
+link. Adding a source is one line:
+
+```ts
+{ id: "my-org", name: "My Org", region: "Kenya", category: "Community",
+  cadence: "Monthly", note: "What they run",
+  homepage: "https://example.org/", searchUrl: "https://example.org/events" }
+```
+
+**Built-in adapters** (`fetch.kind`), all parsed in `src/lib/eventParsers.ts`:
+
+| kind | What it reads |
+| --- | --- |
+| `vabu-listing` / `vabu-org` | vabu.app server-rendered event + fanbase markup |
+| `luma` | lu.ma public discovery API (scoped to a place — Nairobi by default) |
+| `devpost` | devpost.com hackathon API (online hackathons) |
+| `jsonld` | `schema.org` `Event` blocks embedded in any page — works on most WordPress / conference sites |
+| `ics` | Any iCalendar feed (`.ics`) |
+
+Sites that need a login or a headless browser (LinkedIn, Instagram, Meetup
+search) are intentionally **directory-only** — you open them yourself rather
+than the server pretending to fetch them.
+
+**Directory column.** On desktop it sits to the right of the feed; on mobile it
+stacks underneath. Filter by region (Kenya / Africa / Global) or by name, and
+each row links straight to the org's browse page.
+
+**Subscribe in one click.** The Subscribe card exports the whole week — every
+deterministic source plus the AI picks — as an iCalendar feed:
+`/api/weekly-ics?weekStart=…&weekEnd=…` (`&download=1` forces a file download).
+"Subscribe (webcal)" hands it to your calendar app; "Download .ics" gives you a
+file. Times are emitted in Africa/Nairobi wall-clock time.
+
+**Source health.** The panel lists each fetched source with how many in-week
+events it returned and when it was last checked, so a silently-broken scraper
+shows up as "quiet" instead of just disappearing from the feed.
+
+**Multi-day events.** A hackathon running Jul 31 – Oct 1 still appears in a week
+that falls inside its range, not only in the week it started.
+
+### Desktop layout
+
+The app is mobile-first, but above the `lg` breakpoint it now uses the full
+window: a persistent left navigation rail replaces the bottom tab bar, page
+content widens, and the Events tab becomes a two-zone layout (feed + sticky
+reference column). Nothing changes below `lg` — the phone layout is untouched.
+
 ## What's inside
 
 - **Setup** — pick your tasks and a start date. That's it. No quiz, no vow, no fake science.
