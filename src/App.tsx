@@ -16,6 +16,7 @@ const Examen = lazy(() => import("@/pages/Examen"));
 const Compass = lazy(() => import("@/pages/Compass"));
 const Events = lazy(() => import("@/pages/Events"));
 import { BottomNav, type Tab } from "@/components/BottomNav";
+import { SideNav } from "@/components/SideNav";
 import { CelebrationLayer } from "@/components/CelebrationLayer";
 import SplashScreen from "@/components/SplashScreen";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
@@ -115,7 +116,7 @@ function TopControls({ syncStatus, onSignOut }: { syncStatus: SyncStatus; onSign
   const resetAll = useAppStore((s) => s.resetAll);
 
   return (
-    <div className="fixed right-4 top-4 z-30 flex items-center gap-1.5">
+    <div className="fixed right-4 top-4 z-30 flex items-center gap-1.5 lg:right-8">
       <GoogleDot />
       <SyncIndicator status={syncStatus} onSignOut={onSignOut} />
       <button
@@ -204,8 +205,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
-      <Suspense fallback={<PageFallback />}>
-        {tab === "today" && <Today onOpenExamen={() => setTab("examen")} onOpenStreaks={() => setStreaksOpen(true)} onOpenDetox={() => setTab("detox")} />}
+      <SideNav active={tab} onChange={setTab} />
+      <div className="lg:pl-64">
+        <Suspense fallback={<PageFallback />}>
+          {tab === "today" && <Today onOpenExamen={() => setTab("examen")} onOpenStreaks={() => setStreaksOpen(true)} onOpenDetox={() => setTab("detox")} />}
         {tab === "examen" && <Examen />}
         {tab === "detox" && <Detox />}
         {tab === "compass" && <Compass />}
@@ -215,7 +218,8 @@ export default function App() {
             <Streaks onBack={() => setStreaksOpen(false)} />
           </div>
         )}
-      </Suspense>
+        </Suspense>
+      </div>
       <BottomNav active={tab} onChange={setTab} />
       <TopControls syncStatus={syncStatus} onSignOut={signOut} />
       <CelebrationLayer />

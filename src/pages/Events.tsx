@@ -3,6 +3,7 @@ import {
   Bookmark,
   CalendarDays,
   Check,
+  Download,
   ExternalLink,
   MapPin,
   Plus,
@@ -13,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Card } from "@/components/ui";
+import { SourceDirectory, SourceHealthPanel } from "@/components/SourceDirectory";
 import { useAppStore } from "@/store/useAppStore";
 import { useFeedback } from "@/hooks/useFeedback";
 import {
@@ -21,6 +23,7 @@ import {
   eventKey,
   fetchTechEvents,
   getWeekRange,
+  icsUrl,
   loadSavedEvents,
   mapsLink,
   shareEvent,
@@ -56,6 +59,11 @@ function weekDays(weekStart: string): { iso: string; dow: string; num: string }[
   });
 }
 
+/** Turns an https URL into a webcal:// one so the OS hands it to a calendar app. */
+function webcalUrl(httpUrl: string): string {
+  return httpUrl.replace(/^https?:\/\//, "webcal://");
+}
+
 function EventCard({
   ev,
   copied,
@@ -79,13 +87,13 @@ function EventCard({
   const map = mapsLink(ev);
   const place = [ev.city, ev.venue].filter(Boolean).join(" · ") || "Kenya";
   return (
-    <Card className="py-4">
+    <Card className="flex h-full flex-col py-4">
       {ev.image && (
         <img
           src={ev.image}
           alt=""
           loading="lazy"
-          className="mb-3 h-32 w-full rounded-xl object-cover"
+          className="mb-3 h-32 w-full rounded-xl object-cover lg:h-36"
           style={{ border: "1px solid var(--color-line)" }}
         />
       )}
@@ -108,7 +116,6 @@ function EventCard({
       </div>
       <p className="mt-0.5 text-sm font-semibold leading-snug">{ev.title}</p>
 
-      {/* badges: cost + topics */}
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {ev.isFree === true && (
           <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: "var(--color-good)", color: "#fbf3e7" }}>
@@ -160,46 +167,47 @@ function EventCard({
         )}
       </p>
 
-      {/* embedded links */}
-      <div className="mt-3 flex gap-2">
-        {ev.url && (
-          <a
-            href={ev.url}
-            target="_blank"
-            rel="noreferrer"
+      <div className="mt-auto pt-3">
+        <div className="flex gap-2">
+          {ev.url && (
+            <a
+              href={ev.url}
+              target="_blank"
+              rel="noreferrer"
+              className="tactile flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-xs font-semibold"
+              style={{ borderColor: "var(--color-line)", color: "var(--color-ember)", background: "var(--color-surface)" }}
+            >
+              <ExternalLink size={12} /> Details
+            </a>
+          )}
+          {map && (
+            <a
+              href={map}
+              target="_blank"
+              rel="noreferrer"
+              className="tactile flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-xs font-semibold"
+              style={{ borderColor: "var(--color-line)", color: "var(--color-ember)", background: "var(--color-surface)" }}
+            >
+              <MapPin size={12} /> Map
+            </a>
+          )}
+          <button
+            onClick={() => onShare(ev)}
             className="tactile flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-xs font-semibold"
-            style={{ borderColor: "var(--color-line)", color: "var(--color-ember)", background: "var(--color-surface)" }}
+            style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)", background: "var(--color-surface)" }}
           >
-            <ExternalLink size={12} /> Details
-          </a>
-        )}
-        {map && (
-          <a
-            href={map}
-            target="_blank"
-            rel="noreferrer"
-            className="tactile flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-xs font-semibold"
-            style={{ borderColor: "var(--color-line)", color: "var(--color-ember)", background: "var(--color-surface)" }}
-          >
-            <MapPin size={12} /> Map
-          </a>
-        )}
+            {copied ? <Check size={12} color="var(--color-good)" /> : <Share2 size={12} />}
+            {copied ? "Copied" : "Share"}
+          </button>
+        </div>
         <button
-          onClick={() => onShare(ev)}
-          className="tactile flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-xs font-semibold"
-          style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)", background: "var(--color-surface)" }}
+          onClick={(e) => onAdd(ev, e.currentTarget)}
+          className="tactile mt-2 flex w-full items-center justify-center gap-1 rounded-full py-2.5 text-xs font-semibold"
+          style={{ background: "var(--color-ember-soft)", color: "var(--color-ember)" }}
         >
-          {copied ? <Check size={12} color="var(--color-good)" /> : <Share2 size={12} />}
-          {copied ? "Copied" : "Share"}
+          <Plus size={12} /> Add to calendar
         </button>
       </div>
-      <button
-        onClick={(e) => onAdd(ev, e.currentTarget)}
-        className="tactile mt-2 flex w-full items-center justify-center gap-1 rounded-full py-2.5 text-xs font-semibold"
-        style={{ background: "var(--color-ember-soft)", color: "var(--color-ember)" }}
-      >
-        <Plus size={12} /> Add to calendar
-      </button>
     </Card>
   );
 }
@@ -221,12 +229,14 @@ export default function Events() {
   const [events, setEvents] = useState<TechEvent[]>([]);
   const [saved, setSaved] = useState<TechEvent[]>(() => loadSavedEvents());
   const [hubs] = useState<{ name: string; url: string; blurb: string }[]>(() => [...TECH_HUBS]);
-  const [directSources, setDirectSources] = useState<{ id: string; label: string; url: string; ok?: boolean; count?: number }[]>([]);
   const [aiFill, setAiFill] = useState(0);
+  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const week = useMemo(() => getWeekRange(), []);
   const days = useMemo(() => weekDays(week.weekStart), [week.weekStart]);
+  const feedIcs = useMemo(() => icsUrl(week.weekStart, week.weekEnd), [week.weekStart, week.weekEnd]);
+  const feedDownload = useMemo(() => icsUrl(week.weekStart, week.weekEnd, true), [week.weekStart, week.weekEnd]);
 
   async function load(force = false) {
     if (force) setRefreshing(true);
@@ -235,8 +245,8 @@ export default function Events() {
     try {
       const res = await fetchTechEvents(force);
       setEvents(res.events);
-      setDirectSources(res.sources);
       setAiFill(res.aiFill);
+      setFetchedAt(res.fetchedAt);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't load events.");
     } finally {
@@ -262,7 +272,6 @@ export default function Events() {
       lifeArea: "learning",
     });
     feedback.complete(el);
-    // Best-effort mirror to Google when connected (auth state is on the dot).
     if (gcal.connected) {
       void gcal
         .insert(
@@ -366,7 +375,7 @@ export default function Events() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-5 pb-28 pt-14">
+    <div className="mx-auto w-full max-w-md px-5 pb-28 pt-14 lg:max-w-[1440px] lg:px-10 lg:pb-16">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
@@ -376,7 +385,7 @@ export default function Events() {
             <CalendarDays size={22} color="var(--color-ember)" /> Tech this week
           </h1>
           <p className="mt-1 text-sm" style={{ color: "var(--color-ink-dim)" }}>
-            Kenya listings fetched directly · online picks labeled AI. Verify on the event page.
+            Pulled from vabu, Luma Nairobi and Devpost · online picks labelled AI. Verify on the event page.
           </p>
         </div>
         <button
@@ -390,210 +399,224 @@ export default function Events() {
         </button>
       </div>
 
-      {/* Where */}
-      <div className="mt-4 flex gap-1.5 overflow-x-auto">
-        {modes.map((c) => chip(mode === c.key, () => setMode(c.key), c.label, c.key))}
-      </div>
+      {/* Two zones on desktop: the feed, and a sticky reference column. */}
+      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
+        <main>
+          {/* Where */}
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            {modes.map((c) => chip(mode === c.key, () => setMode(c.key), c.label, c.key))}
+          </div>
 
-      {/* Day strip */}
-      <div className="mt-2.5 flex gap-1.5 overflow-x-auto">
-        {chip(day === "all", () => setDay("all"), "Any day", "any-day")}
-        {days.map((d) => (
-          <button
-            key={d.iso}
-            onClick={() => setDay(day === d.iso ? "all" : d.iso)}
-            aria-label={`Filter ${d.iso}`}
-            className="tactile flex shrink-0 flex-col items-center rounded-xl px-2.5 py-1.5"
-            style={{
-              background: day === d.iso ? "var(--color-ember)" : "var(--color-surface)",
-              color: day === d.iso ? "#fbf3e7" : "var(--color-ink-dim)",
-              boxShadow: day === d.iso ? "var(--shadow-raised)" : "var(--shadow-flush)",
-            }}
-          >
-            <span className="text-[10px] font-semibold">{d.dow}</span>
-            <span className="text-xs font-bold">{d.num}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* City / cost / topic */}
-      <div className="mt-2.5 flex gap-2">
-        <select
-          value={city}
-          onChange={(e) => setCity(e.target.value)}
-          aria-label="Filter by city"
-          className="w-1/3 rounded-xl border px-2 py-2 text-xs font-medium outline-none"
-          style={selectStyle()}
-        >
-          <option value="all">All cities</option>
-          {cities.map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-        <select
-          value={cost}
-          onChange={(e) => setCost(e.target.value as Cost)}
-          aria-label="Filter by cost"
-          className="w-1/3 rounded-xl border px-2 py-2 text-xs font-medium outline-none"
-          style={selectStyle()}
-        >
-          {costs.map((c) => (
-            <option key={c.key} value={c.key}>{c.label}</option>
-          ))}
-        </select>
-        <select
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          aria-label="Filter by topic"
-          className="w-1/3 rounded-xl border px-2 py-2 text-xs font-medium outline-none"
-          style={selectStyle()}
-        >
-          <option value="all">All topics</option>
-          {topicsPresent.map((t) => (
-            <option key={t} value={t}>{TOPIC_LABELS[t] ?? t}</option>
-          ))}
-        </select>
-      </div>
-
-      <div
-        className="mt-2.5 flex items-center gap-2 rounded-xl border px-3 py-2.5"
-        style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}
-      >
-        <Search size={14} color="var(--color-ink-faint)" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search title, city, host, topic…"
-          className="w-full bg-transparent text-sm outline-none"
-          style={{ color: "var(--color-ink)" }}
-        />
-        {query && (
-          <button onClick={() => setQuery("")} aria-label="Clear search">
-            <X size={14} color="var(--color-ink-faint)" />
-          </button>
-        )}
-      </div>
-
-      <div className="mt-2.5 flex items-center justify-between">
-        <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
-          {!loading && !error
-            ? `Showing ${visible.length} of ${base.length}${mode !== "saved" && aiFill > 0 ? ` · including ${aiFill} AI picks` : ""}`
-            : " "}
-        </p>
-        {hasFilters && (
-          <button onClick={clearFilters} className="text-xs font-semibold" style={{ color: "var(--color-ember)" }}>
-            Clear all ×
-          </button>
-        )}
-      </div>
-
-      <div className="mt-3 space-y-3">
-        {loading &&
-          [0, 1, 2].map((i) => (
-            <Card key={i} className="animate-pulse py-4">
-              <div className="h-3 w-24 rounded" style={{ background: "var(--color-line)" }} />
-              <div className="mt-2 h-4 w-3/4 rounded" style={{ background: "var(--color-line)" }} />
-            </Card>
-          ))}
-
-        {!loading && error && (
-          <Card>
-            <p className="text-sm" style={{ color: "var(--color-bad)" }}>{error}</p>
-            <button
-              onClick={() => void load(true)}
-              className="mt-2 text-sm font-semibold"
-              style={{ color: "var(--color-ember)" }}
-            >
-              Try again →
-            </button>
-          </Card>
-        )}
-
-        {!loading && !error && visible.length === 0 && (
-          <Card>
-            <p className="text-sm font-semibold">
-              {mode === "saved" && !hasDetailFilters ? "No saved events yet." : "Nothing matching those filters."}
-            </p>
-            <p className="mt-1 text-sm" style={{ color: "var(--color-ink-dim)" }}>
-              {mode === "saved" && !hasDetailFilters
-                ? "Tap the bookmark on any event to keep it here — saved events stay even after the weekly feed refreshes."
-                : "Nothing in the feed for these filters this week. Try clearing a filter — the hubs below are worth a look."}
-            </p>
-            {hasFilters && (
-              <button onClick={clearFilters} className="mt-2 text-sm font-semibold" style={{ color: "var(--color-ember)" }}>
-                Clear all filters →
-              </button>
-            )}
-          </Card>
-        )}
-
-        {!loading && !error && visible.map((ev) => (
-          <EventCard
-            key={eventKey(ev)}
-            ev={ev}
-            copied={copiedKey === eventKey(ev)}
-            saved={saved.some((s) => eventKey(s) === eventKey(ev))}
-            onAdd={addToCalendar}
-            onShare={handleShare}
-            onToggleSave={handleToggleSave}
-          />
-        ))}
-      </div>
-
-      {directSources.length > 0 && (
-        <div className="mt-6">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
-            Fetched from
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {directSources.map((s) => (
-              <a
-                key={s.id}
-                href={s.url}
-                target="_blank"
-                rel="noreferrer"
-                className="tactile inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold"
+          {/* Day strip */}
+          <div className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5">
+            {chip(day === "all", () => setDay("all"), "Any day", "any-day")}
+            {days.map((d) => (
+              <button
+                key={d.iso}
+                onClick={() => setDay(day === d.iso ? "all" : d.iso)}
+                aria-label={`Filter ${d.iso}`}
+                className="tactile flex shrink-0 flex-col items-center rounded-xl px-2.5 py-1.5"
                 style={{
-                  borderColor: "var(--color-line)",
-                  color: s.ok === false ? "var(--color-ink-faint)" : "var(--color-ember)",
-                  background: "var(--color-surface)",
-                  opacity: s.ok === false ? 0.65 : 1,
+                  background: day === d.iso ? "var(--color-ember)" : "var(--color-surface)",
+                  color: day === d.iso ? "#fbf3e7" : "var(--color-ink-dim)",
+                  boxShadow: day === d.iso ? "var(--shadow-raised)" : "var(--shadow-flush)",
                 }}
               >
-                {s.label}
-                {typeof s.count === "number" && s.ok !== false ? ` · ${s.count}` : ""}
-                {s.ok === false ? " (offline)" : ""} <ExternalLink size={11} />
-              </a>
+                <span className="text-[10px] font-semibold">{d.dow}</span>
+                <span className="text-xs font-bold">{d.num}</span>
+              </button>
             ))}
           </div>
-        </div>
-      )}
 
-      {hubs.length > 0 && (
-        <div className="mt-6">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
-            Always-on hubs
-          </p>
-          <div className="space-y-2">
-            {hubs.map((h) => (
-              <a
-                key={h.url}
-                href={h.url}
-                target="_blank"
-                rel="noreferrer"
-                className="tactile flex items-center justify-between gap-3 rounded-2xl border px-4 py-3"
-                style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}
-              >
-                <span>
-                  <span className="block text-sm font-semibold">{h.name}</span>
-                  <span className="block text-xs" style={{ color: "var(--color-ink-dim)" }}>{h.blurb}</span>
-                </span>
-                <ExternalLink size={14} color="var(--color-ink-faint)" />
-              </a>
+          {/* City / cost / topic */}
+          <div className="mt-2.5 flex gap-2">
+            <select
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              aria-label="Filter by city"
+              className="w-1/3 rounded-xl border px-2 py-2 text-xs font-medium outline-none"
+              style={selectStyle()}
+            >
+              <option value="all">All cities</option>
+              {cities.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <select
+              value={cost}
+              onChange={(e) => setCost(e.target.value as Cost)}
+              aria-label="Filter by cost"
+              className="w-1/3 rounded-xl border px-2 py-2 text-xs font-medium outline-none"
+              style={selectStyle()}
+            >
+              {costs.map((c) => (
+                <option key={c.key} value={c.key}>{c.label}</option>
+              ))}
+            </select>
+            <select
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              aria-label="Filter by topic"
+              className="w-1/3 rounded-xl border px-2 py-2 text-xs font-medium outline-none"
+              style={selectStyle()}
+            >
+              <option value="all">All topics</option>
+              {topicsPresent.map((t) => (
+                <option key={t} value={t}>{TOPIC_LABELS[t] ?? t}</option>
+              ))}
+            </select>
+          </div>
+
+          <div
+            className="mt-2.5 flex items-center gap-2 rounded-xl border px-3 py-2.5"
+            style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}
+          >
+            <Search size={14} color="var(--color-ink-faint)" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search title, city, host, topic…"
+              className="w-full bg-transparent text-sm outline-none"
+              style={{ color: "var(--color-ink)" }}
+            />
+            {query && (
+              <button onClick={() => setQuery("")} aria-label="Clear search">
+                <X size={14} color="var(--color-ink-faint)" />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-2.5 flex items-center justify-between">
+            <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
+              {!loading && !error
+                ? `Showing ${visible.length} of ${base.length}${mode !== "saved" && aiFill > 0 ? ` · including ${aiFill} AI picks` : ""}`
+                : " "}
+            </p>
+            {hasFilters && (
+              <button onClick={clearFilters} className="text-xs font-semibold" style={{ color: "var(--color-ember)" }}>
+                Clear all ×
+              </button>
+            )}
+          </div>
+
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">
+            {loading &&
+              [0, 1, 2, 3].map((i) => (
+                <Card key={i} className="animate-pulse py-4">
+                  <div className="h-3 w-24 rounded" style={{ background: "var(--color-line)" }} />
+                  <div className="mt-2 h-4 w-3/4 rounded" style={{ background: "var(--color-line)" }} />
+                </Card>
+              ))}
+
+            {!loading && error && (
+              <Card className="sm:col-span-2">
+                <p className="text-sm" style={{ color: "var(--color-bad)" }}>{error}</p>
+                <button
+                  onClick={() => void load(true)}
+                  className="mt-2 text-sm font-semibold"
+                  style={{ color: "var(--color-ember)" }}
+                >
+                  Try again →
+                </button>
+              </Card>
+            )}
+
+            {!loading && !error && visible.length === 0 && (
+              <Card className="sm:col-span-2">
+                <p className="text-sm font-semibold">
+                  {mode === "saved" && !hasDetailFilters ? "No saved events yet." : "Nothing matching those filters."}
+                </p>
+                <p className="mt-1 text-sm" style={{ color: "var(--color-ink-dim)" }}>
+                  {mode === "saved" && !hasDetailFilters
+                    ? "Tap the bookmark on any event to keep it here — saved events stay even after the weekly feed refreshes."
+                    : "Nothing in the feed for these filters this week. Try clearing a filter — the directory on the right is worth a look."}
+                </p>
+                {hasFilters && (
+                  <button onClick={clearFilters} className="mt-2 text-sm font-semibold" style={{ color: "var(--color-ember)" }}>
+                    Clear all filters →
+                  </button>
+                )}
+              </Card>
+            )}
+
+            {!loading && !error && visible.map((ev) => (
+              <EventCard
+                key={eventKey(ev)}
+                ev={ev}
+                copied={copiedKey === eventKey(ev)}
+                saved={saved.some((s) => eventKey(s) === eventKey(ev))}
+                onAdd={addToCalendar}
+                onShare={handleShare}
+                onToggleSave={handleToggleSave}
+              />
             ))}
           </div>
-        </div>
-      )}
+        </main>
+
+        {/* Reference column — sticky on desktop, stacked beneath the feed on mobile. */}
+        <aside className="space-y-4 lg:sticky lg:top-16 lg:self-start">
+          <Card className="p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
+              Subscribe
+            </p>
+            <p className="mt-0.5 text-sm font-semibold">Put this week in your calendar</p>
+            <p className="mt-1 text-xs" style={{ color: "var(--color-ink-dim)" }}>
+              Adds every event below as a real calendar entry — vabu, Luma and Devpost, plus the online picks.
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              <a
+                href={webcalUrl(feedIcs)}
+                className="tactile flex items-center justify-center gap-2 rounded-full py-2.5 text-xs font-semibold"
+                style={{ background: "var(--color-ember)", color: "#fbf3e7" }}
+              >
+                <CalendarDays size={13} /> Subscribe (webcal)
+              </a>
+              <a
+                href={feedDownload}
+                download={`tech-events-${week.weekStart}.ics`}
+                className="tactile flex items-center justify-center gap-2 rounded-full border py-2.5 text-xs font-semibold"
+                style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)", background: "var(--color-surface)" }}
+              >
+                <Download size={13} /> Download .ics
+              </a>
+            </div>
+            {fetchedAt && (
+              <p className="mt-2 text-[10px]" style={{ color: "var(--color-ink-faint)" }}>
+                Feed pulled {new Date(fetchedAt).toLocaleString("en-KE")}
+              </p>
+            )}
+          </Card>
+
+          <SourceHealthPanel refreshKey={fetchedAt ?? ""} />
+          <SourceDirectory />
+
+          {hubs.length > 0 && (
+            <Card className="p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
+                Always-on hubs
+              </p>
+              <div className="mt-2.5 space-y-2">
+                {hubs.map((h) => (
+                  <a
+                    key={h.url}
+                    href={h.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="tactile flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5"
+                    style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold">{h.name}</span>
+                      <span className="block truncate text-xs" style={{ color: "var(--color-ink-dim)" }}>{h.blurb}</span>
+                    </span>
+                    <ExternalLink size={13} color="var(--color-ink-faint)" />
+                  </a>
+                ))}
+              </div>
+            </Card>
+          )}
+        </aside>
+      </div>
     </div>
   );
 }

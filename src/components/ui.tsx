@@ -164,6 +164,6 @@ export const Card = React.forwardRef<
 
 export function ScreenShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex h-full max-w-md flex-col px-5 pt-14 pb-8">{children}</div>
+    <div className="mx-auto flex h-full max-w-md flex-col px-5 pt-14 pb-8 lg:max-w-3xl lg:px-10">{children}</div>
   );
 }

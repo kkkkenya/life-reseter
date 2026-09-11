@@ -2,7 +2,7 @@ import { Sunrise, Feather, Compass, ShieldCheck, CalendarDays } from "lucide-rea
 
 export type Tab = "today" | "examen" | "detox" | "compass" | "events";
 
-const TABS: { key: Tab; label: string; icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
+export const TABS: { key: Tab; label: string; icon: React.ComponentType<{ size?: number; color?: string }> }[] = [
   { key: "today", label: "Today", icon: Sunrise },
   { key: "examen", label: "Examen", icon: Feather },
   { key: "detox", label: "Detox", icon: ShieldCheck },
@@ -13,7 +13,7 @@ const TABS: { key: Tab; label: string; icon: React.ComponentType<{ size?: number
 export function BottomNav({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-30 border-t"
+      className="fixed inset-x-0 bottom-0 z-30 border-t lg:hidden"
       style={{ background: "var(--color-bg)", borderColor: "var(--color-line)", boxShadow: "0 -8px 24px -12px rgba(74, 51, 39, 0.18)" }}
     >
       <div className="mx-auto flex max-w-md items-center justify-around py-2.5">
