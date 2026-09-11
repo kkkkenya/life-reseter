@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Check, ChevronDown, Star } from "lucide-react";
 import { Card, PrimaryButton } from "@/components/ui";
 import { IconFor } from "@/components/IconFor";
+import { GoalTargetEditor } from "@/components/GoalTargetEditor";
 import { useAppStore } from "@/store/useAppStore";
 import { LIFE_AREAS, getLifeArea, OBJECTIVE_HORIZONS } from "@/data/lifeAreas";
 import { goalDailyEvidence, formatGoalEvidenceText } from "@/lib/goalEvidence";
-import type { LifeAreaKey, UserProfile } from "@/types";
+import type { LifeAreaKey, ObjectiveHorizon, GoalTarget, UserProfile } from "@/types";
 
 const REVIEW_INTERVAL_MS = 7 * 86400000;
 
@@ -90,12 +91,11 @@ export default function WeeklyReview() {
                 <p className="mb-1 text-xs font-medium" style={{ color: "var(--color-ink-dim)" }}>
                   {h.label}
                 </p>
-                <input
+                <GoalTargetEditor
                   value={pinnedGoal[h.key]}
-                  onChange={(e) => setGoal(pinnedArea.key, h.key, e.target.value)}
-                  placeholder={`${h.label} goal for ${pinnedArea.shortLabel.toLowerCase()}...`}
-                  className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
-                  style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
+                  onChange={(patch: Partial<GoalTarget>) => setGoal(pinnedArea.key, h.key as ObjectiveHorizon, patch)}
+                  accent={pinnedArea.color}
+                  labelPlaceholder={`${h.label} goal for ${pinnedArea.shortLabel.toLowerCase()}...`}
                 />
               </div>
             ))}
@@ -176,12 +176,12 @@ export default function WeeklyReview() {
                       <p className="mb-1 text-[11px] font-medium" style={{ color: "var(--color-ink-dim)" }}>
                         {h.label}
                       </p>
-                      <input
+                      <GoalTargetEditor
                         value={goal[h.key]}
-                        onChange={(e) => setGoal(area.key, h.key, e.target.value)}
-                        placeholder={`${h.label} goal for ${area.shortLabel.toLowerCase()}...`}
-                        className="w-full rounded-lg border px-2.5 py-1.5 text-xs outline-none"
-                        style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
+                        onChange={(patch: Partial<GoalTarget>) => setGoal(area.key, h.key as ObjectiveHorizon, patch)}
+                        accent={area.color}
+                        labelPlaceholder={`${h.label} goal for ${area.shortLabel.toLowerCase()}...`}
+                        size="compact"
                       />
                     </div>
                   ))}
