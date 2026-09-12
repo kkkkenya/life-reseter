@@ -3,6 +3,7 @@ import { Bell, BellOff } from "lucide-react";
 import { Card, Switch, PrimaryButton } from "@/components/ui";
 import { useAppStore } from "@/store/useAppStore";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
+import { SchoolImport } from "@/pages/life/SchoolImport";
 import {
   streakRemindersAvailable,
   isPushSupported,
@@ -145,6 +146,8 @@ export default function Settings() {
           )}
         </Card>
       </div>
+
+      <SchoolImport />
 
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
