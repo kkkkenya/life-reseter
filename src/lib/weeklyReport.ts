@@ -61,3 +61,9 @@ Streaks: ${streakLines || "none tracked"}
 Income logged this month so far: ${incomeThisMonth} KES (target floor: 50,000 KES/month)
 Average mood this week: ${avgMood}/10`;
 }
+
+/** Wraps the weekly data context with the one review prompt we ask AI for:
+ *  three lines — keep / change / watch. The only AI text feature left. */
+export function buildReviewPrompt(weeklyContext: string, firstName: string): string {
+  return `You're briefing ${firstName || "a friend"} on their week like a best friend who refuses to let them settle — warm, direct, zero fluff.\n\n${weeklyContext}\n\nReply with EXACTLY three short lines (one sentence each), labeled exactly:\nKEEP: <what's working — protect it>\nCHANGE: <the one highest-leverage fix>\nWATCH: <the risk or deadline to keep an eye on>`;
+}

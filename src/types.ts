@@ -335,43 +335,10 @@ export interface DailyGospelEntry {
   reflection?: string;
 }
 
-/** The rotating emphases for daily quests — now user-defined pillars, not a fixed set. */
-export type QuestFocus = string; // matches a QuestPillar.key
-
-export interface QuestPillar {
-  key: string;
-  label: string;
-  /** Guides AI quest generation — describe the kind of action this pillar should produce. */
-  description: string;
-  color: string;
-  /** lucide-react icon name, rendered via IconFor */
-  icon: string;
-  lifeArea?: LifeAreaKey; // optional tag; untagged pillars are unaffected by pinning
-}
-
 export interface DevotionalSettings {
   enabled: boolean;
   /** sequential = same deterministic daily rotation as before; random = deterministic-but-shuffled per day */
   mode: "sequential" | "random";
-}
-
-export type CoachTone = "blunt" | "gentle" | "drill" | "stoic";
-
-export interface DailyQuest {
-  id: string;
-  dateKey: string; // ISO date this quest is for
-  title: string;
-  description: string;
-  focus: QuestFocus;
-  xpBonus: number;
-  status: "pending" | "done";
-  source: "gemini" | "fallback";
-}
-
-export interface QuestRerollLedger {
-  weekKey: string; // ISO week this ledger's counters apply to
-  usedThisWeek: number; // 0-5, resets when weekKey rolls over
-  usedToday: Record<string, number>; // ISO date -> count used that day, capped at 2
 }
 
 export interface IncomeGoal {
@@ -387,7 +354,7 @@ export interface UserProfile {
   displayName: string;
   /** The no-limits 10-year dream, in their own words — the North Star. */
   dream: string;
-  aboutMe: string; // free-text "who you are / what you do / interests" — used to personalize AI-generated quests
+  aboutMe: string; // free-text "who you are / what you do / interests" — feeds the weekly review and journal reflections
   quiz: QuizAnswers | null;
   resetType: ResetType | null;
   stats: Record<StatKey, number>;
@@ -422,14 +389,9 @@ export interface UserProfile {
   dayCompleteShown: Record<string, boolean>; // ISO date -> "day complete" popup already shown for that date
   skipReasons: Record<string, string>; // "day-uid" -> reason
   dailyGospel: Record<string, DailyGospelEntry>; // ISO date -> verse+reflection
-  dailyReview: Record<string, string>; // ISO date -> Gemini review text
   weeklyReports: Record<string, string>; // ISO week key -> Gemini report text
-  quests: Record<string, DailyQuest[]>; // ISO date -> that day's quest(s)
-  questReroll: QuestRerollLedger;
   incomeGoal: IncomeGoal;
-  questPillars: QuestPillar[];
   devotional: DevotionalSettings;
-  coachTone: CoachTone;
   correlationSnapshots: Record<string, CorrelationSnapshotEntry[]>; // ISO week key -> that week's top correlations
 }
 

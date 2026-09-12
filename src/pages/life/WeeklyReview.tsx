@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { Check, ChevronDown, Star } from "lucide-react";
+import { Check, ChevronDown, Copy, RefreshCw, Sparkles, Star } from "lucide-react";
 import { Card, PrimaryButton } from "@/components/ui";
 import { IconFor } from "@/components/IconFor";
 import { GoalTargetEditor } from "@/components/GoalTargetEditor";
 import { useAppStore } from "@/store/useAppStore";
 import { LIFE_AREAS, getLifeArea, OBJECTIVE_HORIZONS } from "@/data/lifeAreas";
 import { goalDailyEvidence, formatGoalEvidenceText } from "@/lib/goalEvidence";
+import { askGemini, isGeminiConfigured } from "@/lib/gemini";
+import { buildReviewPrompt, buildWeeklySummaryContext } from "@/lib/weeklyReport";
+import { isoWeekKey } from "@/lib/isoWeek";
 import type { LifeAreaKey, ObjectiveHorizon, GoalTarget, UserProfile } from "@/types";
 
 const REVIEW_INTERVAL_MS = 7 * 86400000;
@@ -29,8 +32,44 @@ export default function WeeklyReview() {
   const setGoal = useAppStore((s) => s.setGoal);
   const setGoalWhy = useAppStore((s) => s.setGoalWhy);
   const markGoalsReviewed = useAppStore((s) => s.markGoalsReviewed);
+  const setWeeklyReport = useAppStore((s) => s.setWeeklyReport);
   const [acknowledged, setAcknowledged] = useState<Set<LifeAreaKey>>(new Set());
   const [expandedArea, setExpandedArea] = useState<LifeAreaKey | null>(null);
+
+  // The one AI feature left: a weekly review written from the week's real
+  // numbers (completions, streaks, journal moods, income). No daily reviews,
+  // no coach personas, no quests — one honest read per week.
+  const weekKey = isoWeekKey();
+  const cachedReport = profile.weeklyReports[weekKey];
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const firstName = profile.displayName.trim().split(/\s+/)[0] || "";
+
+  async function generateReview() {
+    setGenerating(true);
+    setGenError(null);
+    try {
+      const context = buildWeeklySummaryContext(profile);
+      const text = await askGemini(buildReviewPrompt(context, firstName), {
+        temperature: 0.7,
+        maxOutputTokens: 220,
+      });
+      setWeeklyReport(weekKey, text);
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : "Failed to generate review.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function copyReview() {
+    if (!cachedReport) return;
+    navigator.clipboard.writeText(cachedReport).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   // Defensive re-check — Overview decides whether to mount at all, but this keeps the component
   // safe to render standalone too.
@@ -59,6 +98,53 @@ export default function WeeklyReview() {
 
   return (
     <>
+      {isGeminiConfigured && (
+        <Card className="mb-3" spineColor="var(--color-gold)">
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ember)" }}>
+            This week, reviewed
+          </p>
+          {cachedReport ? (
+            <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{cachedReport}</p>
+          ) : (
+            <p className="mt-2 text-sm" style={{ color: "var(--color-ink-dim)" }}>
+              One AI read of your week — written from what you actually completed, skipped, journaled and earned. Not a horoscope.
+            </p>
+          )}
+          <div className="mt-3 flex gap-2">
+            {cachedReport && (
+              <button
+                onClick={copyReview}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold"
+                style={{ background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
+              >
+                <Copy size={13} /> {copied ? "Copied" : "Copy to share"}
+              </button>
+            )}
+            <button
+              onClick={generateReview}
+              disabled={generating}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold disabled:opacity-50"
+              style={{ background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
+            >
+              {cachedReport ? (
+                <>
+                  <RefreshCw size={13} className={generating ? "animate-spin" : ""} /> Regenerate
+                </>
+              ) : (
+                <>
+                  <Sparkles size={13} /> {generating ? "Writing…" : "Write my review"}
+                </>
+              )}
+            </button>
+          </div>
+          {genError && (
+            <p className="mt-2 text-xs" style={{ color: "var(--color-bad)" }}>
+              {genError}
+            </p>
+          )}
+        </Card>
+      )}
+
       <p className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
         Weekly check-in
       </p>

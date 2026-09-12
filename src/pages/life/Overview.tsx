@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -11,7 +11,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
-import { Award, Copy, RefreshCw, Sparkles } from "lucide-react";
+import { Award } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { Card } from "@/components/ui";
 import { programDayFromDate, dateFromProgramDay, formatShortDate } from "@/lib/planGenerator";
@@ -24,27 +24,17 @@ import {
   timeOfDayInsight,
   priorityRebalanceSuggestions,
   frequencyRebalanceSuggestions,
-  computeSeasonPacing,
 } from "@/lib/habitAnalytics";
 import { HeatmapCalendar } from "@/components/HeatmapCalendar";
-import { isGeminiConfigured, askGemini } from "@/lib/gemini";
-import { coachVoice } from "@/data/coachTones";
 import { isoWeekKey } from "@/lib/isoWeek";
-import { buildWeeklySummaryContext } from "@/lib/weeklyReport";
 import WeeklyReview, { shouldShowWeeklyReview } from "@/pages/life/WeeklyReview";
-import { OBSTACLE_OPTIONS, SEASON_OPTIONS, checkInInsights } from "@/lib/onboarding";
-import { buildBriefingPrompt, parseBriefing, ruleBasedBriefing } from "@/lib/briefing";
+import { OBSTACLE_OPTIONS, SEASON_OPTIONS } from "@/lib/onboarding";
 
 export default function Overview() {
   const profile = useAppStore((s) => s.profile);
-  const setWeeklyReport = useAppStore((s) => s.setWeeklyReport);
   const setTaskPriority = useAppStore((s) => s.setTaskPriority);
   const updateTaskFrequency = useAppStore((s) => s.updateTaskFrequency);
-  const setSeasonDuration = useAppStore((s) => s.setSeasonDuration);
   const setCorrelationSnapshot = useAppStore((s) => s.setCorrelationSnapshot);
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const todayDay = profile.startDate
     ? programDayFromDate(profile.startDate, new Date().toISOString().slice(0, 10))
@@ -73,7 +63,6 @@ export default function Overview() {
   const todInsight = useMemo(() => timeOfDayInsight(profile), [profile]);
   const prioritySuggestions = useMemo(() => priorityRebalanceSuggestions(profile), [profile]);
   const frequencySuggestions = useMemo(() => frequencyRebalanceSuggestions(profile), [profile]);
-  const seasonPacing = useMemo(() => computeSeasonPacing(profile), [profile]);
   const topTaskHeatmap = useMemo(() => {
     if (profile.tasks.length === 0) return null;
     // pick the task with the most "done" entries as the representative habit to show
@@ -94,7 +83,6 @@ export default function Overview() {
   const correlation = useMemo(() => pearsonCorrelation(moodData), [moodData]);
 
   const weekKey = isoWeekKey();
-  const cachedReport = profile.weeklyReports[weekKey];
 
   const cachedSnapshot = profile.correlationSnapshots[weekKey];
   // A fresh live compute each render — cheap (pure math over already-loaded data) — used both as
@@ -109,62 +97,6 @@ export default function Overview() {
   }, [weekKey, liveWeeklyCorrelations]);
 
   const weeklyPatterns = cachedSnapshot ?? liveWeeklyCorrelations;
-
-  const firstName = profile.displayName.trim().split(/\s+/)[0] || "";
-  const checkinStats = useMemo(() => checkInInsights(Object.values(profile.checkins)), [profile.checkins]);
-  const openDeadlines = useMemo(
-    () =>
-      profile.deadlines
-        .filter((d) => !d.done)
-        .sort((a, b) => `${a.dueDate} ${a.dueTime ?? ""}`.localeCompare(`${b.dueDate} ${b.dueTime ?? ""}`)),
-    [profile.deadlines]
-  );
-  const briefingFacts = useMemo(
-    () => ({
-      bestTaskLabel: topTaskHeatmap?.label ?? null,
-      bestTaskDays: topTaskHeatmap?.doneCount ?? 0,
-      perfectStreak: perfectDays.current,
-      todBest: todInsight?.best ?? null,
-      todBestRate: todInsight?.bestRate ?? null,
-      todWorst: todInsight?.worst ?? null,
-      todWorstRate: todInsight?.worstRate ?? null,
-      topPattern: weeklyPatterns[0] ? correlationPredictsSentence(weeklyPatterns[0]) : null,
-      openDeadlines: openDeadlines.length,
-      nearestDeadline: openDeadlines[0] ? `${openDeadlines[0].title} · ${openDeadlines[0].dueDate}` : null,
-      checkinAvg: checkinStats.count > 0 ? checkinStats.avgScore : null,
-      weeklyFocus: profile.weeklyFocus[weekKey] ?? null,
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [topTaskHeatmap, perfectDays, todInsight, weeklyPatterns, openDeadlines, checkinStats, profile.weeklyFocus, weekKey]
-  );
-  const quickTake = useMemo(() => ruleBasedBriefing(briefingFacts), [briefingFacts]);
-  const parsedBrief = cachedReport ? parseBriefing(cachedReport) : null;
-
-  async function generateReport() {
-    setGenerating(true);
-    setGenError(null);
-    try {
-      const context = buildWeeklySummaryContext(profile);
-      const text = await askGemini(buildBriefingPrompt(context, firstName), {
-        systemInstruction: `${coachVoice(profile.coachTone)} Output exactly the three labeled lines, nothing else.`,
-        temperature: 0.7,
-        maxOutputTokens: 220,
-      });
-      setWeeklyReport(weekKey, text);
-    } catch (e) {
-      setGenError(e instanceof Error ? e.message : "Failed to generate briefing.");
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  function copyReport() {
-    if (!cachedReport) return;
-    navigator.clipboard.writeText(cachedReport).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
 
   return (
     <div>
@@ -192,91 +124,6 @@ export default function Overview() {
           )}
         </Card>
       )}
-      <Card className="mb-4" spineColor="var(--color-gold)">
-        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ember)" }}>
-          Your briefing{firstName ? `, ${firstName}` : ""}
-        </p>
-        {parsedBrief ? (
-          <div className="mt-2 space-y-2.5">
-            {(
-              [
-                ["KEEP", parsedBrief.keep, "var(--color-good)"],
-                ["CHANGE", parsedBrief.change, "var(--color-ember)"],
-                ["WATCH", parsedBrief.watch, "var(--color-gold)"],
-              ] as const
-            ).map(([label, text, color]) => (
-              <div key={label} className="flex items-start gap-2.5">
-                <span
-                  className="mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold"
-                  style={{ background: "var(--color-surface-raised)", color }}
-                >
-                  {label}
-                </span>
-                <p className="text-sm leading-relaxed">{text}</p>
-              </div>
-            ))}
-          </div>
-        ) : cachedReport ? (
-          <p className="mt-2 whitespace-pre-line text-sm leading-relaxed">{cachedReport}</p>
-        ) : (
-          <div className="mt-2 space-y-2.5">
-            {(
-              [
-                ["KEEP", quickTake.keep, "var(--color-good)"],
-                ["CHANGE", quickTake.change, "var(--color-ember)"],
-                ["WATCH", quickTake.watch, "var(--color-gold)"],
-              ] as const
-            ).map(([label, text, color]) => (
-              <div key={label} className="flex items-start gap-2.5">
-                <span
-                  className="mt-0.5 shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold"
-                  style={{ background: "var(--color-surface-raised)", color }}
-                >
-                  {label}
-                </span>
-                <p className="text-sm leading-relaxed">{text}</p>
-              </div>
-            ))}
-            <p className="text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
-              From your numbers directly — no AI needed. Write one in your voice below.
-            </p>
-          </div>
-        )}
-        <div className="mt-3 flex gap-2">
-          {cachedReport && (
-            <button
-              onClick={copyReport}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold"
-              style={{ background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
-            >
-              <Copy size={13} /> {copied ? "Copied" : "Copy to share"}
-            </button>
-          )}
-          {isGeminiConfigured && (
-            <button
-              onClick={generateReport}
-              disabled={generating}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold disabled:opacity-50"
-              style={{ background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
-            >
-              {cachedReport ? (
-                <>
-                  <RefreshCw size={13} className={generating ? "animate-spin" : ""} /> Regenerate
-                </>
-              ) : (
-                <>
-                  <Sparkles size={13} /> {generating ? "Writing…" : "Write mine"}
-                </>
-              )}
-            </button>
-          )}
-        </div>
-        {genError && (
-          <p className="mt-2 text-xs" style={{ color: "var(--color-bad)" }}>
-            {genError}
-          </p>
-        )}
-      </Card>
       <Card>
         <div className="flex items-center justify-between">
           <div>
@@ -415,38 +262,6 @@ export default function Overview() {
       )}
 
       {shouldShowWeeklyReview(profile) && <WeeklyReview />}
-
-      {seasonPacing && (
-        <>
-          <p className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
-            Season pacing
-          </p>
-          <Card>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs leading-relaxed" style={{ color: "var(--color-ink-dim)" }}>
-                Season {profile.season.seasonNumber} is set to {profile.season.durationDays} days. At your recent{" "}
-                <span style={{ fontWeight: 600, color: "var(--color-ember)" }}>{Math.round(seasonPacing.rate * 100)}%</span>{" "}
-                completion rate, a{" "}
-                <span style={{ fontWeight: 600 }}>{seasonPacing.suggestedDurationDays}-day</span> season fits your actual pace better
-                {seasonPacing.pace === "ahead"
-                  ? " — you're moving faster than the current length assumes."
-                  : seasonPacing.pace === "behind"
-                  ? " — the current length is tighter than what you've been able to sustain."
-                  : " — close to where it already is."}
-              </p>
-              {seasonPacing.suggestedDurationDays !== profile.season.durationDays && (
-                <button
-                  onClick={() => setSeasonDuration(seasonPacing.suggestedDurationDays)}
-                  className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold"
-                  style={{ background: "var(--color-surface-raised)", color: "var(--color-ember)" }}
-                >
-                  → {seasonPacing.suggestedDurationDays}d
-                </button>
-              )}
-            </div>
-          </Card>
-        </>
-      )}
 
       <p className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
         Your 7 life areas

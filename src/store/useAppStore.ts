@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
-  DailyQuest,
   DayRecord,
   IncomeEntry,
   IncomeGoal,
@@ -26,23 +25,18 @@ import type {
   TimeOfDay,
   UserProfile,
   VentureLog,
-  QuestPillar,
   QuizAnswers,
   CheckInRecord,
   ClassSession,
   AssignmentDeadline,
   DevotionalSettings,
-  CoachTone,
   CorrelationSnapshotEntry,
 } from "@/types";
-import { isoWeekKey } from "@/lib/isoWeek";
 import { buildCalendar, distributeWeekdays, xpForTask, programDayFromDate } from "@/lib/planGenerator";
 import { RANK_TIERS } from "@/types";
 import { EMPTY_GOALS, emptyGoalTarget, getLifeArea, OBJECTIVE_HORIZONS } from "@/data/lifeAreas";
 import { STREAK_TEMPLATES } from "@/data/streakDefaults";
 import { evaluateMilestones } from "@/lib/milestones";
-import { DEFAULT_QUEST_PILLARS } from "@/data/questPillars";
-import { DEFAULT_COACH_TONE } from "@/data/coachTones";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
@@ -164,14 +158,9 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
     dayCompleteShown: p.dayCompleteShown ?? {},
     skipReasons: p.skipReasons ?? {},
     dailyGospel: p.dailyGospel ?? {},
-    dailyReview: p.dailyReview ?? {},
     weeklyReports: p.weeklyReports ?? {},
-    quests: p.quests ?? {},
-    questReroll: p.questReroll ?? { weekKey: isoWeekKey(), usedThisWeek: 0, usedToday: {} },
     incomeGoal: migrateIncomeGoal(p.incomeGoal),
-    questPillars: p.questPillars && p.questPillars.length > 0 ? p.questPillars : DEFAULT_QUEST_PILLARS,
     devotional: p.devotional ?? DEFAULT_DEVOTIONAL,
-    coachTone: p.coachTone ?? DEFAULT_COACH_TONE,
     correlationSnapshots: p.correlationSnapshots ?? {},
   };
 }
@@ -215,14 +204,9 @@ const emptyProfile: UserProfile = {
   dayCompleteShown: {},
   skipReasons: {},
   dailyGospel: {},
-  dailyReview: {},
   weeklyReports: {},
-  quests: {},
-  questReroll: { weekKey: isoWeekKey(), usedThisWeek: 0, usedToday: {} },
   incomeGoal: DEFAULT_INCOME_GOAL,
-  questPillars: DEFAULT_QUEST_PILLARS,
   devotional: DEFAULT_DEVOTIONAL,
-  coachTone: DEFAULT_COACH_TONE,
   correlationSnapshots: {},
 };
 
@@ -327,17 +311,9 @@ interface AppState {
   toggleMitDone: (day: number) => void;
   setWeeklyFocus: (weekKey: string, text: string) => void;
   setDailyGospel: (dateKey: string, ref: string, text: string, reflection?: string) => void;
-  setDailyReview: (dateKey: string, text: string) => void;
   setWeeklyReport: (weekKey: string, text: string) => void;
-  setQuestsForDay: (dateKey: string, quests: DailyQuest[]) => void;
-  completeQuest: (dateKey: string, questId: string) => void;
-  /** Applies a reroll: consumes one reroll credit (if available) and swaps in the replacement quest. Returns false if no credits remain. */
-  rerollQuest: (dateKey: string, questId: string, replacement: DailyQuest) => boolean;
-  rerollsRemaining: () => { thisWeek: number; today: number };
   setIncomeGoal: (goal: IncomeGoal) => void;
-  setQuestPillars: (pillars: QuestPillar[]) => void;
   setDevotionalSettings: (settings: DevotionalSettings) => void;
-  setCoachTone: (tone: CoachTone) => void;
   setCorrelationSnapshot: (weekKey: string, entries: CorrelationSnapshotEntry[]) => void;
   /** Adopts a profile pulled from Supabase, repairing any fields missing/stale relative to this app version. */
   hydrateFromRemote: (remote: Partial<UserProfile>) => void;
@@ -1082,98 +1058,16 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      setDailyReview: (dateKey, text) => {
-        set((s) => ({ profile: { ...s.profile, dailyReview: { ...s.profile.dailyReview, [dateKey]: text } } }));
-      },
-
       setWeeklyReport: (weekKey, text) => {
         set((s) => ({ profile: { ...s.profile, weeklyReports: { ...s.profile.weeklyReports, [weekKey]: text } } }));
-      },
-
-      setQuestsForDay: (dateKey, quests) => {
-        set((s) => ({ profile: { ...s.profile, quests: { ...s.profile.quests, [dateKey]: quests } } }));
-      },
-
-      completeQuest: (dateKey, questId) => {
-        set((s) => {
-          const dayQuests = s.profile.quests[dateKey];
-          if (!dayQuests) return s;
-          const quest = dayQuests.find((q) => q.id === questId);
-          if (!quest || quest.status === "done") return s;
-          const updated = dayQuests.map((q) => (q.id === questId ? { ...q, status: "done" as const } : q));
-          const day = s.profile.startDate ? programDayFromDate(s.profile.startDate, dateKey) : null;
-          const days =
-            day && s.profile.days[day]
-              ? { ...s.profile.days, [day]: { ...s.profile.days[day], xpEarned: s.profile.days[day].xpEarned + quest.xpBonus } }
-              : s.profile.days;
-          return {
-            profile: {
-              ...s.profile,
-              quests: { ...s.profile.quests, [dateKey]: updated },
-              days,
-              xpTotal: s.profile.xpTotal + quest.xpBonus,
-              season: { ...s.profile.season, xpThisSeason: s.profile.season.xpThisSeason + quest.xpBonus },
-            },
-          };
-        });
-        get().checkMilestones();
-      },
-
-      rerollQuest: (dateKey, questId, replacement) => {
-        let succeeded = false;
-        set((s) => {
-          const wk = isoWeekKey();
-          const ledger =
-            s.profile.questReroll.weekKey === wk ? s.profile.questReroll : { weekKey: wk, usedThisWeek: 0, usedToday: {} };
-          const usedToday = ledger.usedToday[dateKey] ?? 0;
-          if (ledger.usedThisWeek >= 5 || usedToday >= 2) {
-            // Persist a week-rollover reset even when this specific reroll is denied.
-            return ledger === s.profile.questReroll ? s : { profile: { ...s.profile, questReroll: ledger } };
-          }
-          succeeded = true;
-          const dayQuests = s.profile.quests[dateKey] ?? [];
-          const updatedQuests = dayQuests.map((q) => (q.id === questId ? replacement : q));
-          return {
-            profile: {
-              ...s.profile,
-              quests: { ...s.profile.quests, [dateKey]: updatedQuests },
-              questReroll: {
-                weekKey: wk,
-                usedThisWeek: ledger.usedThisWeek + 1,
-                usedToday: { ...ledger.usedToday, [dateKey]: usedToday + 1 },
-              },
-            },
-          };
-        });
-        return succeeded;
-      },
-
-      rerollsRemaining: () => {
-        const s = get();
-        const wk = isoWeekKey();
-        const key = todayIso();
-        const ledger =
-          s.profile.questReroll.weekKey === wk ? s.profile.questReroll : { weekKey: wk, usedThisWeek: 0, usedToday: {} };
-        return {
-          thisWeek: Math.max(0, 5 - ledger.usedThisWeek),
-          today: Math.max(0, 2 - (ledger.usedToday[key] ?? 0)),
-        };
       },
 
       setIncomeGoal: (goal) => {
         set((s) => ({ profile: { ...s.profile, incomeGoal: goal } }));
       },
 
-      setQuestPillars: (pillars) => {
-        set((s) => ({ profile: { ...s.profile, questPillars: pillars.length > 0 ? pillars : s.profile.questPillars } }));
-      },
-
       setDevotionalSettings: (settings) => {
         set((s) => ({ profile: { ...s.profile, devotional: settings } }));
-      },
-
-      setCoachTone: (tone) => {
-        set((s) => ({ profile: { ...s.profile, coachTone: tone } }));
       },
 
       setCorrelationSnapshot: (weekKey, entries) => {
