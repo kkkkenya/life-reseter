@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { celebrateAt } from "@/store/useCelebrationStore";
 import { playComplete, playMilestone, playLevelUp, playTap, playSkip, playSoft } from "@/lib/sound";
 
 /**
@@ -8,16 +9,19 @@ import { playComplete, playMilestone, playLevelUp, playTap, playSkip, playSoft }
  * same tactile feel for free.
  */
 export function useFeedback() {
-  const complete = useCallback((_el: Element | null) => {
+  const complete = useCallback((el: Element | null) => {
     playComplete();
+    celebrateAt(el, { size: "md" });
   }, []);
 
-  const milestone = useCallback((_el: Element | null) => {
+  const milestone = useCallback((el: Element | null) => {
     playMilestone();
+    celebrateAt(el, { size: "lg", colors: ["#e8b85c", "#ff5f2e", "#edeef0", "#46d17a"] });
   }, []);
 
-  const levelUp = useCallback((_el: Element | null) => {
+  const levelUp = useCallback((el: Element | null) => {
     playLevelUp();
+    celebrateAt(el, { size: "lg" });
   }, []);
 
   const tap = useCallback(() => playTap(), []);

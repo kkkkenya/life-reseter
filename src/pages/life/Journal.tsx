@@ -34,6 +34,7 @@ function mediaSummary(media?: JournalMediaRef[]): string | null {
   return bits.join(" · ") || null;
 }
 import { askGemini, isGeminiConfigured } from "@/lib/gemini";
+import { coachVoice } from "@/data/coachTones";
 import { verseOfTheDay } from "@/data/gospel";
 import { GospelCard } from "@/pages/today/GospelCard";
 
@@ -295,8 +296,7 @@ export default function Journal() {
       const who = profile.displayName.trim() ? `${profile.displayName.trim().split(/\s+/)[0]}'s` : "my";
       const prompt = `Here's ${who} reflection for today:\nWent well: ${wentWell || "(nothing noted)"}\nCould improve: ${couldImprove || "(nothing noted)"}\nTomorrow's win: ${tomorrowWin || "(nothing noted)"}\nMood: ${mood}/10`;
       const text = await askGemini(prompt, {
-        systemInstruction:
-          "Respond in 2-4 sentences to this journal entry like a best friend who wants them to become their best self — warm, in their corner, but unwilling to let them slide. Don't just validate — if something in the entry deserves a pointed follow-up question or a push, give it.",
+        systemInstruction: `${coachVoice(profile.coachTone)} Respond in 2-4 sentences to this journal entry like a best friend who wants them to become their best self — warm, in their corner, but unwilling to let them slide. Don't just validate — if something in the entry deserves a pointed follow-up question or a push, give it.`,
         temperature: 0.7,
         maxOutputTokens: 200,
       });

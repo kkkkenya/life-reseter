@@ -4,6 +4,9 @@ import { useAppStore } from "@/store/useAppStore";
 import { IconFor } from "@/components/IconFor";
 import { useFeedback } from "@/hooks/useFeedback";
 import { programDayFromDate, dateFromProgramDay, formatShortDate } from "@/lib/planGenerator";
+import { askGemini } from "@/lib/gemini";
+import { coachVoice } from "@/data/coachTones";
+import { getSweetGreeting } from "@/lib/sweetWords";
 import { detoxStreakDuration } from "@/lib/streaks";
 import { isSunday, isoWeekKey } from "@/lib/isoWeek";
 import { type SchedulableTask } from "@/lib/autoSchedule";
@@ -17,7 +20,11 @@ import { MitPickerSheet } from "@/pages/today/MitPickerSheet";
 import { ScheduleView, type RolloverCandidate } from "@/pages/today/ScheduleView";
 import { CalendarGrid } from "@/pages/today/CalendarGrid";
 import { EventScanSheet } from "@/pages/today/EventScanSheet";
+import { QuestBoard } from "@/pages/today/QuestBoard";
+import { DailyReviewCard } from "@/pages/today/DailyReviewCard";
 import { EveningPlanningCard } from "@/pages/today/EveningPlanningCard";
+import { DayCompleteModal } from "@/components/DayCompleteModal";
+import { dayCompletionInfo, computeDayStreak } from "@/lib/dayCompletion";
 import type { TimeOfDay, RecurrenceRule, TaskPriority, TaskDefinition } from "@/types";
 
 export default function Today({
@@ -33,6 +40,7 @@ export default function Today({
   const regenerateCalendar = useAppStore((s) => s.regenerateCalendar);
   const addRecurringTask = useAppStore((s) => s.addRecurringTask);
   const setMit = useAppStore((s) => s.setMit);
+  const setDailyReview = useAppStore((s) => s.setDailyReview);
   const setWeeklyFocus = useAppStore((s) => s.setWeeklyFocus);
   const setEveningPlanned = useAppStore((s) => s.setEveningPlanned);
   const addTimeBlock = useAppStore((s) => s.addTimeBlock);
@@ -40,6 +48,7 @@ export default function Today({
   const toggleDeadlineDone = useAppStore((s) => s.toggleDeadlineDone);
   const toggleTimeBlockDone = useAppStore((s) => s.toggleTimeBlockDone);
   const moveTimeBlock = useAppStore((s) => s.moveTimeBlock);
+  const markDayCompleteShown = useAppStore((s) => s.markDayCompleteShown);
 
   const feedback = useFeedback();
 
@@ -51,6 +60,9 @@ export default function Today({
   const [scanOpen, setScanOpen] = useState(false);
   const [view, setView] = useState<"list" | "schedule" | "calendar">("list");
   const [mitPicking, setMitPicking] = useState(false);
+
+  const [reviewGenerating, setReviewGenerating] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const todayIso = new Date().toISOString().slice(0, 10);
   const weekKey = isoWeekKey();
@@ -83,6 +95,19 @@ export default function Today({
 
   // ---- Rollover: yesterday's incomplete blocks, only surfaced while viewing today ----
   const isViewingToday = viewDay === todayProgramDay;
+
+  // ---- "Day complete" popup: fires once per calendar date, the moment today's last pending task clears ----
+  const todayDayInfo = dayCompletionInfo(profile.days[todayProgramDay]);
+  const dayCompleteAlreadyShown = !!profile.dayCompleteShown[todayIso];
+  const [showDayComplete, setShowDayComplete] = useState(false);
+
+  useEffect(() => {
+    if (todayDayInfo.complete && !dayCompleteAlreadyShown) {
+      markDayCompleteShown(todayIso);
+      setShowDayComplete(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayDayInfo.complete, dayCompleteAlreadyShown]);
   const yesterdayIso = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const rolloverCandidates: RolloverCandidate[] = isViewingToday
     ? (profile.timeBlocks[yesterdayIso] ?? []).filter((b) => !b.done).map((block) => ({ fromDate: yesterdayIso, block }))
@@ -117,6 +142,29 @@ export default function Today({
     setAddOpen(false);
   }
 
+  async function generateReview() {
+    setReviewGenerating(true);
+    setReviewError(null);
+    try {
+      const lines = entries.map((e) => `${e.task?.label ?? "task"}: ${e.status}`).join("; ");
+      const text = await askGemini(
+        `Today's tasks: ${lines || "none scheduled"}. Done ${doneCount}, skipped ${skippedCount}, pending ${pendingCount}.`,
+        {
+          systemInstruction: `${coachVoice(profile.coachTone)} Give a 2-3 sentence review of the day based on this data. End with one concrete note for tomorrow.`,
+          temperature: 0.6,
+          maxOutputTokens: 180,
+        }
+      );
+      setDailyReview(todayIso, text);
+    } catch (e) {
+      setReviewError(e instanceof Error ? e.message : "Failed to generate review.");
+    } finally {
+      setReviewGenerating(false);
+    }
+  }
+
+  const review = profile.dailyReview[todayIso];
+  const sweet = getSweetGreeting(new Date(), todayIso);
   const firstName = profile.displayName.trim().split(/\s+/)[0] || "";
 
   // Coming Up: 7-day merge of timetable + blocks + deadlines (+ Google).
@@ -154,12 +202,17 @@ export default function Today({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
-            {firstName ? `Today, ${firstName}` : "Today"}
+            {sweet.greeting}{firstName ? `, ${firstName}` : ""} ☀️
           </p>
           <h1 className="font-display text-2xl font-semibold">Day {viewDay}</h1>
           <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
             {formatShortDate(profile.days[viewDay]?.date ?? dateFromProgramDay(profile.startDate ?? todayIso, viewDay))}
           </p>
+          {isViewingToday && (
+            <p className="mt-1 text-sm font-medium" style={{ color: "var(--color-ember)" }}>
+              {sweet.note}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -178,6 +231,8 @@ export default function Today({
           </button>
         </div>
       </div>
+
+      {isViewingToday && <QuestBoard dateKey={todayIso} isToday />}
 
       {showSundayRitual && (
         <Card className="mt-4">
@@ -473,6 +528,9 @@ export default function Today({
               feedback.skip();
             }}
           />
+          {entries.length > 0 && (
+            <DailyReviewCard review={review} generating={reviewGenerating} error={reviewError} onGenerate={generateReview} />
+          )}
         </div>
       )}
 
@@ -550,6 +608,14 @@ export default function Today({
             setMit(viewDay, { label, taskUid: uid, done: false });
             setMitPicking(false);
           }}
+        />
+      )}
+
+      {showDayComplete && (
+        <DayCompleteModal
+          streak={computeDayStreak(profile, todayProgramDay)}
+          tasksDone={todayDayInfo.done}
+          onClose={() => setShowDayComplete(false)}
         />
       )}
     </div>

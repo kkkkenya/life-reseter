@@ -1,6 +1,9 @@
 import { create } from "zustand";
+import { isoWeekKey } from "@/lib/isoWeek";
 import { persist } from "zustand/middleware";
 import type {
+  CoachTone,
+  DailyQuest,
   DayRecord,
   IncomeEntry,
   IncomeGoal,
@@ -12,6 +15,7 @@ import type {
   MitEntry,
   ObjectiveHorizon,
   PlannedTask,
+  QuestPillar,
   RecurrenceRule,
   StreakHabit,
   DetoxHabit,
@@ -33,6 +37,8 @@ import { buildCalendar, distributeWeekdays, xpForTask, programDayFromDate } from
 import { EMPTY_GOALS, emptyGoalTarget, getLifeArea, OBJECTIVE_HORIZONS } from "@/data/lifeAreas";
 import { STREAK_TEMPLATES } from "@/data/streakDefaults";
 import { evaluateMilestones } from "@/lib/milestones";
+import { DEFAULT_QUEST_PILLARS } from "@/data/questPillars";
+import { DEFAULT_COACH_TONE } from "@/data/coachTones";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
@@ -149,11 +155,17 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
     mitByDay: p.mitByDay ?? {},
     weeklyFocus: p.weeklyFocus ?? {},
     eveningPlanned: p.eveningPlanned ?? {},
+    dayCompleteShown: p.dayCompleteShown ?? {},
     skipReasons: p.skipReasons ?? {},
     dailyGospel: p.dailyGospel ?? {},
+    dailyReview: p.dailyReview ?? {},
+    quests: p.quests ?? {},
+    questReroll: p.questReroll ?? { weekKey: isoWeekKey(), usedThisWeek: 0, usedToday: {} },
     weeklyReports: p.weeklyReports ?? {},
     incomeGoal: migrateIncomeGoal(p.incomeGoal),
+    questPillars: p.questPillars && p.questPillars.length > 0 ? p.questPillars : DEFAULT_QUEST_PILLARS,
     devotional: p.devotional ?? DEFAULT_DEVOTIONAL,
+    coachTone: p.coachTone ?? DEFAULT_COACH_TONE,
     correlationSnapshots: p.correlationSnapshots ?? {},
   };
 }
@@ -169,6 +181,7 @@ const emptyProfile: UserProfile = {
   pomodoroSessions: 0,
   days: {},
   xpTotal: 0,
+  vow: { antiVision: "", vowText: "", signedAt: null },
   streaks: [],
   detoxHabits: [],
   journal: {},
@@ -187,11 +200,17 @@ const emptyProfile: UserProfile = {
   mitByDay: {},
   weeklyFocus: {},
   eveningPlanned: {},
+  dayCompleteShown: {},
   skipReasons: {},
   dailyGospel: {},
+  dailyReview: {},
   weeklyReports: {},
+  quests: {},
+  questReroll: { weekKey: isoWeekKey(), usedThisWeek: 0, usedToday: {} },
   incomeGoal: DEFAULT_INCOME_GOAL,
+  questPillars: DEFAULT_QUEST_PILLARS,
   devotional: DEFAULT_DEVOTIONAL,
+  coachTone: DEFAULT_COACH_TONE,
   correlationSnapshots: {},
 };
 
@@ -223,6 +242,8 @@ interface AppState {
   removeTask: (uid: string) => void;
   updateTaskFrequency: (uid: string, freq: number) => void;
   startProgram: (startDateOverride?: string) => void;
+  setVowAntiVision: (text: string) => void;
+  signVow: (vowText: string) => void;
   completeTask: (day: number, uid: string) => void;
   skipTask: (day: number, uid: string, reason?: string) => void;
   regenerateCalendar: () => void;
@@ -281,13 +302,23 @@ interface AppState {
   /** Copies an incomplete block from one date to another (used for "carry over to today"), removing it from the source. */
   moveTimeBlock: (fromDate: string, id: string, toDate: string) => void;
   setEveningPlanned: (dateKey: string, done: boolean) => void;
+  /** Marks today's "all tasks done" popup as shown so it only fires once per calendar date. */
+  markDayCompleteShown: (dateKey: string) => void;
   setMit: (day: number, entry: MitEntry) => void;
   toggleMitDone: (day: number) => void;
   setWeeklyFocus: (weekKey: string, text: string) => void;
   setDailyGospel: (dateKey: string, ref: string, text: string, reflection?: string) => void;
+  setDailyReview: (dateKey: string, text: string) => void;
+  setQuestsForDay: (dateKey: string, quests: DailyQuest[]) => void;
+  completeQuest: (dateKey: string, questId: string) => void;
+  /** Applies a reroll: consumes one reroll credit (if available) and swaps in the replacement quest. Returns false if no credits remain. */
+  rerollQuest: (dateKey: string, questId: string, replacement: DailyQuest) => boolean;
+  rerollsRemaining: () => { thisWeek: number; today: number };
   setWeeklyReport: (weekKey: string, text: string) => void;
   setIncomeGoal: (goal: IncomeGoal) => void;
+  setQuestPillars: (pillars: QuestPillar[]) => void;
   setDevotionalSettings: (settings: DevotionalSettings) => void;
+  setCoachTone: (tone: CoachTone) => void;
   setCorrelationSnapshot: (weekKey: string, entries: CorrelationSnapshotEntry[]) => void;
   /** Adopts a profile pulled from Supabase, repairing any fields missing/stale relative to this app version. */
   hydrateFromRemote: (remote: Partial<UserProfile>) => void;
@@ -376,6 +407,17 @@ export const useAppStore = create<AppState>()(
           },
         }));
       },
+
+      setVowAntiVision: (text) =>
+        set((s) => ({ profile: { ...s.profile, vow: { ...s.profile.vow, antiVision: text } } })),
+
+      signVow: (vowText) =>
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            vow: { ...s.profile.vow, vowText, signedAt: new Date().toISOString() },
+          },
+        })),
 
       startProgram: (startDateOverride) => {
         const start = startDateOverride ?? todayIso();
@@ -914,6 +956,12 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
+      markDayCompleteShown: (dateKey) => {
+        set((s) => ({
+          profile: { ...s.profile, dayCompleteShown: { ...s.profile.dayCompleteShown, [dateKey]: true } },
+        }));
+      },
+
       setMit: (day, entry) => {
         set((s) => ({ profile: { ...s.profile, mitByDay: { ...s.profile.mitByDay, [day]: entry } } }));
       },
@@ -948,12 +996,93 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ profile: { ...s.profile, weeklyReports: { ...s.profile.weeklyReports, [weekKey]: text } } }));
       },
 
+      setDailyReview: (dateKey, text) => {
+        set((s) => ({ profile: { ...s.profile, dailyReview: { ...s.profile.dailyReview, [dateKey]: text } } }));
+      },
+
+      setQuestsForDay: (dateKey, quests) => {
+        set((s) => ({ profile: { ...s.profile, quests: { ...s.profile.quests, [dateKey]: quests } } }));
+      },
+
+      completeQuest: (dateKey, questId) => {
+        set((s) => {
+          const dayQuests = s.profile.quests[dateKey];
+          if (!dayQuests) return s;
+          const quest = dayQuests.find((q) => q.id === questId);
+          if (!quest || quest.status === "done") return s;
+          const updated = dayQuests.map((q) => (q.id === questId ? { ...q, status: "done" as const } : q));
+          const day = s.profile.startDate ? programDayFromDate(s.profile.startDate, dateKey) : null;
+          const days =
+            day && s.profile.days[day]
+              ? { ...s.profile.days, [day]: { ...s.profile.days[day], xpEarned: s.profile.days[day].xpEarned + quest.xpBonus } }
+              : s.profile.days;
+          return {
+            profile: {
+              ...s.profile,
+              quests: { ...s.profile.quests, [dateKey]: updated },
+              days,
+              xpTotal: s.profile.xpTotal + quest.xpBonus,
+            },
+          };
+        });
+        get().checkMilestones();
+      },
+
+      rerollQuest: (dateKey, questId, replacement) => {
+        let succeeded = false;
+        set((s) => {
+          const wk = isoWeekKey();
+          const ledger =
+            s.profile.questReroll.weekKey === wk ? s.profile.questReroll : { weekKey: wk, usedThisWeek: 0, usedToday: {} };
+          const usedToday = ledger.usedToday[dateKey] ?? 0;
+          if (ledger.usedThisWeek >= 5 || usedToday >= 2) {
+            // Persist a week-rollover reset even when this specific reroll is denied.
+            return ledger === s.profile.questReroll ? s : { profile: { ...s.profile, questReroll: ledger } };
+          }
+          succeeded = true;
+          const dayQuests = s.profile.quests[dateKey] ?? [];
+          const updatedQuests = dayQuests.map((q) => (q.id === questId ? replacement : q));
+          return {
+            profile: {
+              ...s.profile,
+              quests: { ...s.profile.quests, [dateKey]: updatedQuests },
+              questReroll: {
+                weekKey: wk,
+                usedThisWeek: ledger.usedThisWeek + 1,
+                usedToday: { ...ledger.usedToday, [dateKey]: usedToday + 1 },
+              },
+            },
+          };
+        });
+        return succeeded;
+      },
+
+      rerollsRemaining: () => {
+        const s = get();
+        const wk = isoWeekKey();
+        const key = todayIso();
+        const ledger =
+          s.profile.questReroll.weekKey === wk ? s.profile.questReroll : { weekKey: wk, usedThisWeek: 0, usedToday: {} };
+        return {
+          thisWeek: Math.max(0, 5 - ledger.usedThisWeek),
+          today: Math.max(0, 2 - (ledger.usedToday[key] ?? 0)),
+        };
+      },
+
       setIncomeGoal: (goal) => {
         set((s) => ({ profile: { ...s.profile, incomeGoal: goal } }));
       },
 
+      setQuestPillars: (pillars) => {
+        set((s) => ({ profile: { ...s.profile, questPillars: pillars.length > 0 ? pillars : s.profile.questPillars } }));
+      },
+
       setDevotionalSettings: (settings) => {
         set((s) => ({ profile: { ...s.profile, devotional: settings } }));
+      },
+
+      setCoachTone: (tone) => {
+        set((s) => ({ profile: { ...s.profile, coachTone: tone } }));
       },
 
       setCorrelationSnapshot: (weekKey, entries) => {

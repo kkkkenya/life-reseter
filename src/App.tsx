@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Sun, Moon, Volume2, VolumeX, Cloud, CloudOff, LogOut } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { useUIStore } from "@/store/useUIStore";
@@ -15,6 +15,8 @@ const Life = lazy(() => import("@/pages/Life"));
 const Events = lazy(() => import("@/pages/Events"));
 import { BottomNav, type Tab } from "@/components/BottomNav";
 import { SideNav } from "@/components/SideNav";
+import { CelebrationLayer } from "@/components/CelebrationLayer";
+import SplashScreen from "@/components/SplashScreen";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import { playTap } from "@/lib/sound";
 
@@ -155,6 +157,8 @@ export default function App() {
   const checkMilestones = useAppStore((s) => s.checkMilestones);
   const [tab, setTab] = useState<Tab>("today");
   const [streaksOpen, setStreaksOpen] = useState(false);
+  const [splash, setSplash] = useState(true);
+  const dismissSplash = useCallback(() => setSplash(false), []);
 
   useSyncTheme();
   const { userId, loading: authLoading, isConfigured, signOut } = useSupabaseAuth();
@@ -168,7 +172,11 @@ export default function App() {
   // Cloud sync is opt-in: with no Supabase env vars set, this block never
   // triggers and the app behaves exactly as it did local-only.
   if (isConfigured && authLoading) {
-    return <div className="min-h-screen" style={{ background: "var(--color-bg)" }} />;
+    return (
+      <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
+        {splash && <SplashScreen onDone={dismissSplash} />}
+      </div>
+    );
   }
   if (isConfigured && !userId) {
     return (
@@ -176,6 +184,7 @@ export default function App() {
         <Suspense fallback={<PageFallback />}>
           <SignIn />
         </Suspense>
+        {splash && <SplashScreen onDone={dismissSplash} />}
       </div>
     );
   }
@@ -186,6 +195,8 @@ export default function App() {
         <Suspense fallback={<PageFallback />}>
           <Setup />
         </Suspense>
+        <CelebrationLayer />
+        {splash && <SplashScreen onDone={dismissSplash} />}
       </div>
     );
   }
@@ -207,6 +218,8 @@ export default function App() {
       </div>
       <BottomNav active={tab} onChange={setTab} />
       <TopControls syncStatus={syncStatus} onSignOut={signOut} />
+      <CelebrationLayer />
+      {splash && <SplashScreen onDone={dismissSplash} />}
     </div>
   );
 }
