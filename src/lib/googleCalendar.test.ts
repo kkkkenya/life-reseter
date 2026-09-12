@@ -29,6 +29,27 @@ describe("buildEventInsert", () => {
     const body = buildEventInsert({ label: "X", date: "2026-09-08", startTime: "18:00", endTime: "09:00" });
     expect(body.end.dateTime).toBe("2026-09-08T18:00:00");
   });
+  it("spans multi-day events across the endDate", () => {
+    const body = buildEventInsert({
+      label: "Shipathon",
+      date: "2026-09-08",
+      endDate: "2026-10-01",
+      startTime: "18:00",
+      endTime: "19:00",
+    });
+    expect(body.start.dateTime).toBe("2026-09-08T18:00:00");
+    expect(body.end.dateTime).toBe("2026-10-01T19:00:00");
+  });
+  it("treats an endDate equal to the start as same-day", () => {
+    const body = buildEventInsert({
+      label: "X",
+      date: "2026-09-08",
+      endDate: "2026-09-08",
+      startTime: "18:00",
+      endTime: "09:00",
+    });
+    expect(body.end.dateTime).toBe("2026-09-08T18:00:00");
+  });
   it("omits empty location", () => {
     expect(buildEventInsert({ label: "X", date: "2026-09-08", startTime: "08:00", endTime: "09:00" }).location).toBeUndefined();
   });
