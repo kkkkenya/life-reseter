@@ -248,9 +248,9 @@ interface AppState {
   removeDetoxHabit: (habitId: string) => void;
   logDetoxEntry: (habitId: string, clean: boolean, count?: number, note?: string) => void;
   saveJournalEntry: (day: number, entry: Partial<Omit<JournalEntry, "day" | "savedAt">>) => void;
-  addIncomeEntry: (venture: string, amountKES: number, note?: string) => void;
+  addIncomeEntry: (venture: string, amountKES: number, note?: string, date?: string) => void;
   removeIncomeEntry: (id: string) => void;
-  addExpenseEntry: (category: string, amountKES: number, note?: string) => void;
+  addExpenseEntry: (category: string, amountKES: number, note?: string, date?: string) => void;
   removeExpenseEntry: (id: string) => void;
   setBudgetCategory: (name: string, capKES: number) => void;
   setAboutMe: (text: string) => void;
@@ -627,10 +627,10 @@ export const useAppStore = create<AppState>()(
         get().checkMilestones();
       },
 
-      addIncomeEntry: (venture, amountKES, note) => {
+      addIncomeEntry: (venture, amountKES, note, date) => {
         const entry: IncomeEntry = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          date: todayIso(),
+          date: date ?? todayIso(),
           venture,
           amountKES,
           note,
@@ -645,10 +645,10 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      addExpenseEntry: (category, amountKES, note) => {
+      addExpenseEntry: (category, amountKES, note, date) => {
         const entry: ExpenseEntry = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          date: todayIso(),
+          date: date ?? todayIso(),
           category,
           amountKES,
           note,
