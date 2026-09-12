@@ -1,9 +1,11 @@
 # RESET — your own behavior-tracking system
 
-A personal, curated habit and life-tracking app. Curation, not theater: every screen
-earns its place by changing what you do next, and everything else got deleted. No
-paywall, no forced account, no onboarding quiz — you open it, pick your tasks, pick a
-start date, and begin. Runs entirely in your browser, data saved to your device via
+A personal, curated habit and life-tracking app — built for exactly one person at a
+time and personalized accordingly. Every screen earns its place by changing what you do
+next; the filler was cut and the personal features were kept and sharpened. No paywall,
+no forced account — you run a full onboarding wizard once (resumable, skippable), the
+app learns who you are, and daily quests, reviews and streaks speak in the coach voice
+you picked. Runs entirely in your browser, data saved to your device via
 localStorage, with optional Supabase cloud sync so the same data follows you across
 devices.
 
@@ -15,9 +17,10 @@ devices.
   settings. Reviewed on a rhythm, not browsed.
 - **Events** — Kenya tech events + online hackathons for this week.
 
-One AI feature (optional): a weekly review written from your real numbers. No daily
-reviews, no coach personas, no quests, no confetti — the reward for finishing a task
-is the finished task.
+AI (optional) is personal by design: two daily quests generated from your pillars,
+persona and this week's actual behavior (including what you keep skipping), a daily
+review, a weekly KEEP/CHANGE/WATCH briefing from your real numbers — all in the coach
+tone you chose during onboarding.
 
 ## Setup
 
@@ -31,10 +34,14 @@ Open the printed URL. To use it on your phone, open the same URL on your phone's
 while on the same network (use the "Network" URL vite prints), or deploy it (see below) and
 "Add to Home Screen" for a real app icon with offline support.
 
-Onboarding is two steps: pick at least 3 tasks (with optional focus areas to shape the
-suggestions), pick a start date, optionally write one sentence about why. Everything
-else — income goals, timetable, devotional verse, streaks — is added later, in context,
-when you actually need it.
+Onboarding is a full wizard — name, season of life, focus areas, the honest one-liner,
+your biggest obstacle, how hard the app should talk (the remaining questions literally
+rewrite themselves in that voice), quest pillars, interests, devotional on/off, your
+chronotype, what you're quitting (each starts a streak clock), a one-year vision, a
+ten-year dream, the five-year cost of nothing changing, an income range, your task
+lineup, and — for students — an optional timetable import. It's resumable if you close
+the app, ends with an editable contract summarizing who you told RESET you're becoming,
+and commits everything at once.
 
 ## M-Pesa statement import (Finances)
 
@@ -51,17 +58,16 @@ statement doesn't parse, the error tells you to re-export rather than guessing r
 
 ## Gemini AI features (optional)
 
-This enables exactly one thing:
-- **The weekly review** — once a week, the Weekly check-in offers a three-line read of
-  your week (KEEP / CHANGE / WATCH) written from what you actually completed, skipped,
-  journaled and earned, with a copy-to-share button.
-
-Plus three small on-request helpers, all in service of words you were going to write
-anyway:
-- A 2-sentence reflection tying the daily Gospel verse to discipline (Journal)
-- An optional reflection after you journal (Journal)
-- Reading a poster/timetable photo into form fields (poster scan & timetable import) —
-  extraction, not generation
+- **Two daily quests** — generated from your chosen pillars, your persona and interests,
+  your income goal, and this week's actual behavior (the task you keep skipping gets
+  attacked head-on). Reroll ledger: 5/week, 2/day. Complete every quest for consecutive
+  days and a quest streak builds (with a 7-day milestone).
+- **Daily review** — a 2-3 sentence evening read of what you did, skipped and pending.
+- **Weekly briefing** — KEEP / CHANGE / WATCH from your week's real numbers, with a
+  rule-based offline version so the card is never empty.
+- **Journal reflection + Gospel-verse reflection** — small on-request helpers.
+- **Coach voice** — blunt / gentle / drill / stoic, set in onboarding, changeable in
+  Settings; it colors reviews, quests, and reflections.
 
 **The key is server-side only** — the app calls `/api/*` serverless functions
 (`api/gemini.ts` and friends), which are the only places that ever read the real key. It
@@ -301,14 +307,16 @@ reference column). Nothing changes below `lg` — the phone layout is untouched.
 
 ## What's inside
 
-- **Setup** — two steps: pick your tasks (min 3), pick a start date. One optional
-  free-text why. No quiz, no vow, no fake science.
-- **Today** — daily tasks (grouped by time of day, sorted by priority), a Most Important
-  Task spotlight, list / time-blocked schedule / calendar grid views, skip-with-reason,
-  incomplete tasks auto-carry into today from yesterday, a streak glance strip, the
-  Sunday weekly-focus prompt, the daily Gospel verse (KJV, Jesus's words only), and an
-  evening planning nudge. The day counter has no cap — a lifetime odometer, not a
-  program.
+- **Setup** — a resumable onboarding wizard that ends in an editable personal contract
+  (see Onboarding above). Your quest pillars, coach voice, quit-list streaks, income
+  goal and persona all come out of it.
+- **Today** — your 2 daily quests (pillar-driven, behavior-aware, rerollable, one-tap
+  "block it into the schedule"), daily tasks (grouped by time of day, sorted by
+  priority), a Most Important Task spotlight, list / time-blocked schedule / calendar
+  grid views, skip-with-reason, incomplete tasks auto-carry into today from yesterday,
+  a streak glance strip, the Sunday weekly-focus prompt, the daily Gospel verse (KJV,
+  Jesus's words only), an evening AI review, an evening planning nudge, and a day-complete
+  moment when everything gets done. The day counter has no cap — a lifetime odometer.
 - **Adding a task** — weekly, biweekly, or monthly (specific day of month) frequency, a
   priority (P1/P2/P3), and a time-of-day bucket.
 - **Poster scan** — upload an event poster/screenshot and the schedule fields fill
@@ -318,10 +326,10 @@ reference column). Nothing changes below `lg` — the phone layout is untouched.
   no PMO) with a live clock, relapse logging with pattern insights and milestone badges;
   task-linked positive streaks that auto-compute; and "cutting down" trackers (daily
   limits, clean days) for habits that are counts rather than clocks.
-- **Journal** — morning energy/gratitude/sleep/workout check-in, evening reflection,
-  optional Ignatian examen prompts, handwritten-photo pages + voice notes (stored
-  device-local in IndexedDB, synced to your own Supabase storage), and an AI reflection
-  on request.
+- **Journal** — morning energy/gratitude/sleep/workout check-in, the daily Gospel verse,
+  evening reflection, optional Ignatian examen prompts, handwritten-photo pages + voice
+  notes (stored device-local in IndexedDB, synced to your own Supabase storage), and an
+  AI reflection on request in your coach voice.
 - **Finances** — income + expenses with a real net number, budget categories with monthly
   caps, your income-range goal, and M-Pesa statement import (see above).
 - **Goals** — daily/weekly/monthly/6-month/yearly objectives per life area; achieved
