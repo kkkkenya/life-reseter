@@ -39,24 +39,45 @@ export function loadSourceHealth(): SourceHealth[] {
   }
 }
 
-/** Merge this pull's per-source status into the stored history. */
+function withStatus(before: SourceHealth | undefined, s: SourceStatusLike, fetchedAt: string): SourceHealth {
+  const ok = s.ok === true;
+  const count = s.count ?? 0;
+  return {
+    id: s.id,
+    label: s.label,
+    url: s.url,
+    ok,
+    count,
+    lastCheckedAt: fetchedAt,
+    lastOkAt: ok && count > 0 ? fetchedAt : before?.lastOkAt ?? null,
+    lastCount: count,
+  };
+}
+
+/** Merge this pull's per-source status into the stored history. Sources not
+ *  part of this pull (e.g. the request died before reaching them) keep their
+ *  last known status instead of being silently wiped. */
 export function recordSourceHealth(sources: SourceStatusLike[], fetchedAt: string): SourceHealth[] {
   const prev = new Map(loadSourceHealth().map((h) => [h.id, h]));
-  const next: SourceHealth[] = sources.map((s) => {
-    const before = prev.get(s.id);
-    const ok = s.ok === true;
-    const count = s.count ?? 0;
-    return {
-      id: s.id,
-      label: s.label,
-      url: s.url,
-      ok,
-      count,
-      lastCheckedAt: fetchedAt,
-      lastOkAt: ok && count > 0 ? fetchedAt : before?.lastOkAt ?? null,
-      lastCount: count,
-    };
-  });
+  const updates = new Map(sources.map((s) => [s.id, s]));
+  const next: SourceHealth[] = [];
+  const seen = new Set<string>();
+  // Update in stored order so the panel keeps a stable layout…
+  for (const before of prev.values()) {
+    const s = updates.get(before.id);
+    if (!s) {
+      next.push(before);
+      continue;
+    }
+    seen.add(s.id);
+    next.push(withStatus(before, s, fetchedAt));
+  }
+  // …then append sources reporting in for the first time.
+  for (const s of sources) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    next.push(withStatus(undefined, s, fetchedAt));
+  }
   try {
     localStorage.setItem(HEALTH_KEY, JSON.stringify(next.slice(0, 40)));
   } catch {

@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { loadSourceHealth } from "./eventHealth";
 import {
   MAX_AI_FILL,
   MAX_EVENTS_PER_PULL,
+  coveredDays,
+  eventCoversDay,
   eventKey,
   fetchTechEvents,
   getWeekRange,
@@ -48,8 +51,15 @@ function mockFetch(directEvents: unknown[], aiEvents: unknown[]) {
   };
   const ai = { events: aiEvents, hubs: [] };
   const fn = vi.fn(async (url: string) => ({
+    ok: true,
     json: async () => (String(url).includes("direct-events") ? direct : ai),
   }));
+  vi.stubGlobal("fetch", fn);
+  return fn;
+}
+
+function mockFetchFailing(status = 500) {
+  const fn = vi.fn(async () => ({ ok: false, status, json: async () => ({}) }));
   vi.stubGlobal("fetch", fn);
   return fn;
 }
@@ -153,5 +163,94 @@ describe("fetchTechEvents merge", () => {
     const res = await fetchTechEvents(true);
     expect(res.events).toEqual([]);
     expect(res.hubs.length).toBeGreaterThan(0);
+  });
+});
+
+describe("fetchTechEvents failure handling", () => {
+  it("serves the last good feed as stale when a refresh fails", async () => {
+    mockStorage();
+    const { weekStart } = getWeekRange();
+    mockFetch([ev({ title: "Good", date: weekStart })], []);
+    await fetchTechEvents(true);
+
+    mockFetchFailing();
+    const res = await fetchTechEvents(true);
+    expect(res.stale).toBe(true);
+    expect(res.events.map((e) => e.title)).toEqual(["Good"]);
+  });
+
+  it("a failed pull never overwrites the good cache", async () => {
+    mockStorage();
+    const { weekStart } = getWeekRange();
+    mockFetch([ev({ title: "Good", date: weekStart })], []);
+    await fetchTechEvents(true);
+
+    mockFetchFailing();
+    await fetchTechEvents(true);
+
+    mockFetch([ev({ title: "Good", date: weekStart })], []);
+    const again = await fetchTechEvents(true);
+    expect(again.stale).toBeUndefined();
+    expect(again.events.map((e) => e.title)).toEqual(["Good"]);
+    expect(again.source).toBe("direct");
+  });
+
+  it("a failed pull with no history is a fallback and stays uncached", async () => {
+    mockStorage();
+    const fn = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    vi.stubGlobal("fetch", fn);
+    const res = await fetchTechEvents(true);
+    expect(res.events).toEqual([]);
+    expect(res.source).toBe("fallback");
+    expect(res.stale).toBeUndefined();
+
+    const calls = fn.mock.calls.length;
+    await fetchTechEvents(false); // no cache was written → this must hit the network again
+    expect(fn.mock.calls.length).toBe(calls + 2);
+  });
+
+  it("a failed pull preserves source-health history", async () => {
+    mockStorage();
+    const { weekStart } = getWeekRange();
+    mockFetch([ev({ title: "Good", date: weekStart })], []);
+    await fetchTechEvents(true);
+    expect(loadSourceHealth().length).toBeGreaterThan(0);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      })
+    );
+    await fetchTechEvents(true);
+    expect(loadSourceHealth().length).toBeGreaterThan(0);
+  });
+});
+
+describe("eventCoversDay + coveredDays", () => {
+  it("multi-day events cover every day they span", () => {
+    const e = { date: "2026-09-08", endDate: "2026-09-10" };
+    expect(eventCoversDay(e, "2026-09-08")).toBe(true);
+    expect(eventCoversDay(e, "2026-09-09")).toBe(true);
+    expect(eventCoversDay(e, "2026-09-10")).toBe(true);
+    expect(eventCoversDay(e, "2026-09-11")).toBe(false);
+    expect(eventCoversDay(e, "2026-09-07")).toBe(false);
+  });
+
+  it("single-day events only cover their own date", () => {
+    expect(eventCoversDay({ date: "2026-09-08", endDate: null }, "2026-09-08")).toBe(true);
+    expect(eventCoversDay({ date: "2026-09-08", endDate: null }, "2026-09-09")).toBe(false);
+  });
+
+  it("coveredDays caps the planner blocks", () => {
+    expect(coveredDays({ date: "2026-09-08", endDate: "2026-09-09" })).toEqual(["2026-09-08", "2026-09-09"]);
+    expect(coveredDays({ date: "2026-08-01", endDate: "2026-10-01" })).toEqual([
+      "2026-08-01",
+      "2026-08-02",
+      "2026-08-03",
+    ]);
+    expect(coveredDays({ date: "2026-09-08", endDate: null })).toEqual(["2026-09-08"]);
   });
 });
