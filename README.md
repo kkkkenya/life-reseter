@@ -1,15 +1,29 @@
 # RESET — your own behavior-tracking system
 
-A personal, no-theater habit and life-tracking app. No paywall, no forced account, no
-onboarding quiz — you open it, pick your tasks, and start tracking. Runs entirely in your
-browser, data saved to your device via localStorage, with optional Supabase cloud sync so
-the same data follows you across devices.
+A personal, curated habit and life-tracking app. Curation, not theater: every screen
+earns its place by changing what you do next, and everything else got deleted. No
+paywall, no forced account, no onboarding quiz — you open it, pick your tasks, pick a
+start date, and begin. Runs entirely in your browser, data saved to your device via
+localStorage, with optional Supabase cloud sync so the same data follows you across
+devices.
+
+**The three tabs:**
+
+- **Today** — your tasks for the day, the one Most Important Task, your schedule, and
+  the streak strip. This is the only screen you have to open daily.
+- **Life** — the weekly view: overview stats, goals, finances, journal, check-in,
+  settings. Reviewed on a rhythm, not browsed.
+- **Events** — Kenya tech events + online hackathons for this week.
+
+One AI feature (optional): a weekly review written from your real numbers. No daily
+reviews, no coach personas, no quests, no confetti — the reward for finishing a task
+is the finished task.
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env   # optional — only needed for Gemini features
+cp .env.example .env   # optional — only needed for the AI features
 npm run dev
 ```
 
@@ -17,23 +31,44 @@ Open the printed URL. To use it on your phone, open the same URL on your phone's
 while on the same network (use the "Network" URL vite prints), or deploy it (see below) and
 "Add to Home Screen" for a real app icon with offline support.
 
+Onboarding is two steps: pick at least 3 tasks (with optional focus areas to shape the
+suggestions), pick a start date, optionally write one sentence about why. Everything
+else — income goals, timetable, devotional verse, streaks — is added later, in context,
+when you actually need it.
+
+## M-Pesa statement import (Finances)
+
+Skip manual entry. In **Life → Finances → M-Pesa statement**, upload the full-statement
+PDF the M-PESA app emails you. The serverless route (`api/import-mpesa.ts`) extracts the
+text server-side, never stores the file, and returns parsed rows — receipt, real
+transaction date, details, direction, amount. You review the rows (uncheck any), then
+import: income lands under an "M-Pesa" venture, expenses under your selected budget
+category, both keeping the true dates instead of "today".
+
+The parser (`src/lib/mpesa.ts`) is pure and unit-tested against the real statement
+layout, including collapsed Paid In/Withdrawn columns and page-break duplicates. If a
+statement doesn't parse, the error tells you to re-export rather than guessing rows.
+
 ## Gemini AI features (optional)
 
-This enables:
-- A short reflection tying the daily Gospel verse to your day
-- End-of-day AI review of what you did/skipped
-- Weekly blunt report card (with a copy-to-share button)
-- A follow-up reflection after journaling
-- Your 2 daily quests (income / friendship / exposure), tailored to your year income goal
+This enables exactly one thing:
+- **The weekly review** — once a week, the Weekly check-in offers a three-line read of
+  your week (KEEP / CHANGE / WATCH) written from what you actually completed, skipped,
+  journaled and earned, with a copy-to-share button.
 
-Without it configured, everything above still works — quests fall back to a curated offline
-pool instead of Gemini-generated ones, and the other cards just show a "not configured" message.
+Plus three small on-request helpers, all in service of words you were going to write
+anyway:
+- A 2-sentence reflection tying the daily Gospel verse to discipline (Journal)
+- An optional reflection after you journal (Journal)
+- Reading a poster/timetable photo into form fields (poster scan & timetable import) —
+  extraction, not generation
 
-**The key is server-side only** — the app calls `/api/gemini` (a Vercel serverless function
-in `api/gemini.ts`), which is the only place that ever reads the real key. It never ships to
-the browser, unlike an earlier version of this app which put the key straight in the client
-bundle (fine for a private local build, but a real problem once deployed publicly — anyone
-inspecting the live site could read it straight out of the JS).
+**The key is server-side only** — the app calls `/api/*` serverless functions
+(`api/gemini.ts` and friends), which are the only places that ever read the real key. It
+never ships to the browser, unlike an earlier version of this app which put the key
+straight in the client bundle (fine for a private local build, but a real problem once
+deployed publicly). The AI routes are same-origin-checked, rate-limited per IP, and
+cached/memoised where a repeat call would re-bill.
 
 **1. Get a free key** at https://aistudio.google.com/apikey.
 
@@ -53,12 +88,11 @@ won't see real Gemini output. To test it locally:
 npm install -g vercel   # once
 vercel dev
 ```
-This runs the static site AND `api/gemini.ts` together, exactly like production.
+This runs the static site AND the `/api` functions together, exactly like production.
 
 **Model:** defaults to `gemini-3.1-flash-lite` (`gemini-2.0-flash`, the old default, was
 retired by Google on March 31, 2026). Override with `GEMINI_MODEL` (server-side, same rule —
-no `VITE_` prefix) if you want something else — e.g. `gemini-3.1-pro-preview` for noticeably
-better quality on the weekly report, at the cost of being slower and not free-tier eligible.
+no `VITE_` prefix) if you want something else.
 
 ## Cloud sync across devices (Supabase, optional)
 
@@ -267,33 +301,36 @@ reference column). Nothing changes below `lg` — the phone layout is untouched.
 
 ## What's inside
 
-- **Setup** — pick your tasks and a start date. That's it. No quiz, no vow, no fake science.
+- **Setup** — two steps: pick your tasks (min 3), pick a start date. One optional
+  free-text why. No quiz, no vow, no fake science.
 - **Today** — daily tasks (grouped by time of day, sorted by priority), a Most Important
   Task spotlight, list / time-blocked schedule / calendar grid views, skip-with-reason,
-  incomplete tasks auto-carry into today from yesterday, streak glance strip, Sunday
-  weekly-focus prompt, the daily Gospel verse (KJV, Jesus's words only, rotates daily),
-  your 2 daily quests, and an AI daily review. The day counter has no cap — it's a lifetime
-  odometer, not a fixed program length.
-- **Adding a task** — set frequency as weekly, biweekly, or monthly (specific day of
-  month), a priority (P1/P2/P3), and a time-of-day bucket.
-- **Streaks** — avoidance streaks (sobriety, no PMO, etc.) with a live clock, relapse
-  logging with pattern insights, and milestone badges. Also supports *positive* streaks
-  linked to a task (e.g. daily Rosary) — the streak auto-computes from consecutive
-  completions, no manual reset needed.
-- **Life** — four sub-tabs:
-  - *Overview*: behavior-derived stats (computed from what you actually complete, not a
-    quiz), a Consistency section (perfect-day streak, a habit heatmap, correlation
-    insights like "you do X more often on days you also do Y"), your 7 life areas by XP,
-    mood-vs-completion correlation, milestones, and the weekly AI report.
-  - *Journal*: morning energy + gratitude check-in, evening reflection (your 4 prompts),
-    an optional Ignatian examen, and an AI reflection on request.
-  - *Finances*: income + expenses with a real net number, budget categories with monthly
-    caps, and your income-range goal.
-  - *Goals*: daily/weekly/monthly/6-month/yearly objectives per life area — mark one
-    achieved and it lands in your milestone tracker.
-- **Tools** — Pomodoro clock, guided breathing, workout logger, sleep log, venture
-  time-split tracker, screen-time check-in.
-- **Season** — a personal XP rank ladder (Bronze → Diamond) on a 24-day cycle.
+  incomplete tasks auto-carry into today from yesterday, a streak glance strip, the
+  Sunday weekly-focus prompt, the daily Gospel verse (KJV, Jesus's words only), and an
+  evening planning nudge. The day counter has no cap — a lifetime odometer, not a
+  program.
+- **Adding a task** — weekly, biweekly, or monthly (specific day of month) frequency, a
+  priority (P1/P2/P3), and a time-of-day bucket.
+- **Poster scan** — upload an event poster/screenshot and the schedule fields fill
+  themselves in (extracted once server-side, never stored). Add it locally, optionally
+  push to Google Calendar.
+- **Streaks** — one page for everything you're *not* doing: avoidance streaks (sobriety,
+  no PMO) with a live clock, relapse logging with pattern insights and milestone badges;
+  task-linked positive streaks that auto-compute; and "cutting down" trackers (daily
+  limits, clean days) for habits that are counts rather than clocks.
+- **Journal** — morning energy/gratitude/sleep/workout check-in, evening reflection,
+  optional Ignatian examen prompts, handwritten-photo pages + voice notes (stored
+  device-local in IndexedDB, synced to your own Supabase storage), and an AI reflection
+  on request.
+- **Finances** — income + expenses with a real net number, budget categories with monthly
+  caps, your income-range goal, and M-Pesa statement import (see above).
+- **Goals** — daily/weekly/monthly/6-month/yearly objectives per life area; achieved
+  goals land in the milestone tracker. A rolling weekly check-in keeps them honest.
+- **School** — not a tab: import your timetable once per semester in Settings (photo →
+  reviewed session list) and deadlines surface in Today's "Coming Up" automatically.
+- **Life areas** — 7 areas earn XP from tasks actually tagged and completed; Overview
+  shows the heatmap, perfect-day streak, and correlation insights computed from your
+  behavior, never a quiz.
 
 ## Deploy to Vercel (full guide)
 
