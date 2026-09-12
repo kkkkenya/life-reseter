@@ -141,3 +141,49 @@ describe("quizFromAnswers", () => {
     expect(quizFromAnswers({ ...base, confidence: -3 }).confidence).toBe(1);
   });
 });
+
+describe("TONE_STEP_COPY", () => {
+  it("covers every post-vibe step in all four voices", async () => {
+    const { TONE_STEP_COPY } = await import("./onboarding");
+    const steps = ["matters", "tastes", "devotional", "rhythm", "quit", "vision", "dream", "nightmare", "income", "tasks", "start"];
+    const tones = ["blunt", "gentle", "drill", "stoic"] as const;
+    for (const step of steps) {
+      expect(TONE_STEP_COPY[step], `step ${step} missing`).toBeDefined();
+      for (const tone of tones) {
+        expect(TONE_STEP_COPY[step][tone].title.length, `${step}/${tone} title`).toBeGreaterThan(0);
+        expect(TONE_STEP_COPY[step][tone].sub.length, `${step}/${tone} sub`).toBeGreaterThan(0);
+      }
+    }
+  });
+  it("stepCopy falls back before a tone is chosen", async () => {
+    const { stepCopy } = await import("./onboarding");
+    const fb = { title: "T", sub: "S" };
+    expect(stepCopy("matters", null, fb)).toBe(fb);
+    expect(stepCopy("matters", "drill", fb).title).not.toBe(fb.title);
+  });
+});
+
+describe("questStreak", async () => {
+  it("counts consecutive all-done days, forgiving an open today", async () => {
+    const mod = await import("./quests");
+    const { questStreak } = mod;
+    const today = "2026-09-13";
+    const q = (status: "pending" | "done") => [
+      { id: "1", dateKey: today, title: "a", description: "", focus: "money", xpBonus: 40, status, source: "fallback" as const },
+      { id: "2", dateKey: today, title: "b", description: "", focus: "people", xpBonus: 40, status: "done" as const, source: "fallback" as const },
+    ];
+    const mk = (status: "pending" | "done") => q(status);
+    const quests: Record<string, Parameters<typeof questStreak>[0][string]> = {};
+    // 3 fully-done days ending yesterday; today pending (open, not breaking)
+    for (let i = 1; i <= 3; i++) {
+      const d = new Date(2026, 8, 13 - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      quests[key] = mk("done");
+    }
+    quests[today] = mk("pending");
+    expect(questStreak(quests, today)).toBe(3);
+    // today done → streak extends
+    quests[today] = mk("done");
+    expect(questStreak(quests, today)).toBe(4);
+  });
+});

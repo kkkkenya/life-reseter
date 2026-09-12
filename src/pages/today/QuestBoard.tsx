@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, RefreshCw, Swords, Loader2 } from "lucide-react";
+import { Check, RefreshCw, Swords, Loader2, CalendarClock, Flame } from "lucide-react";
 import { Card } from "@/components/ui";
 import { IconFor } from "@/components/IconFor";
 import { useAppStore } from "@/store/useAppStore";
 import { useFeedback } from "@/hooks/useFeedback";
-import { generateDailyQuests, generateReplacementQuest } from "@/lib/quests";
+import { generateDailyQuests, generateReplacementQuest, questStreak, type QuestContext } from "@/lib/quests";
+import { isoWeekKey } from "@/lib/isoWeek";
 import type { DailyQuest, QuestPillar } from "@/types";
 
 function pillarFor(pillars: QuestPillar[], key: string): QuestPillar {
@@ -18,6 +19,7 @@ function QuestCard({
   rerollsLeftWeek,
   onComplete,
   onReroll,
+  onBlock,
 }: {
   quest: DailyQuest;
   pillar: QuestPillar;
@@ -25,6 +27,7 @@ function QuestCard({
   rerollsLeftWeek: number;
   onComplete: (el: Element | null) => void;
   onReroll: () => Promise<void>;
+  onBlock: () => void;
 }) {
   const [rerolling, setRerolling] = useState(false);
   const canReroll = quest.status === "pending" && rerollsLeftToday > 0 && rerollsLeftWeek > 0 && !rerolling;
@@ -55,6 +58,16 @@ function QuestCard({
       </div>
 
       <div className="mt-3 flex gap-2">
+        {quest.status === "pending" && (
+          <button
+            onClick={onBlock}
+            title="Drop this quest into today's schedule"
+            className="flex h-auto w-10 items-center justify-center rounded-xl py-2"
+            style={{ background: "var(--color-surface-raised)" }}
+          >
+            <CalendarClock size={13} color="var(--color-ink-dim)" />
+          </button>
+        )}
         <button
           disabled={!canReroll}
           onClick={async () => {
@@ -91,6 +104,10 @@ export function QuestBoard({ dateKey, isToday }: { dateKey: string; isToday: boo
   const coachTone = useAppStore((s) => s.profile.coachTone);
   const aboutMe = useAppStore((s) => s.profile.aboutMe);
   const pinnedFocusArea = useAppStore((s) => s.profile.pinnedFocusArea);
+  const days = useAppStore((s) => s.profile.days);
+  const tasks = useAppStore((s) => s.profile.tasks);
+  const weeklyFocus = useAppStore((s) => s.profile.weeklyFocus);
+  const addTimeBlock = useAppStore((s) => s.addTimeBlock);
   const setQuestsForDay = useAppStore((s) => s.setQuestsForDay);
   const completeQuest = useAppStore((s) => s.completeQuest);
   const rerollQuest = useAppStore((s) => s.rerollQuest);
@@ -109,7 +126,7 @@ export function QuestBoard({ dateKey, isToday }: { dateKey: string; isToday: boo
     if (genRequested.current) return;
     genRequested.current = true;
     setGenerating(true);
-    generateDailyQuests(dateKey, incomeGoal, questPillars, coachTone, aboutMe, pinnedFocusArea)
+    generateDailyQuests(dateKey, incomeGoal, questPillars, coachTone, aboutMe, pinnedFocusArea, questContext())
       .then((q) => setQuestsForDay(dateKey, q))
       .finally(() => setGenerating(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -119,13 +136,62 @@ export function QuestBoard({ dateKey, isToday }: { dateKey: string; isToday: boo
 
   const { thisWeek, today } = rerollsRemaining();
 
+  // Behavior-aware context: what they keep skipping + what they said this
+  // week is about — quests attack reality, not a generic to-do list.
+  function questContext(): QuestContext {
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const skipCounts = new Map<string, number>();
+    Object.values(days).forEach((rec) => {
+      if (rec.date < weekAgo) return;
+      Object.entries(rec.tasks).forEach(([uid, status]) => {
+        if (status === "skipped") skipCounts.set(uid, (skipCounts.get(uid) ?? 0) + 1);
+      });
+    });
+    let worst: { label: string; n: number } | null = null;
+    for (const [uid, n] of skipCounts) {
+      const task = tasks.find((t) => t.uid === uid);
+      if (task && (!worst || n > worst.n)) worst = { label: task.label, n };
+    }
+    return {
+      mostSkippedTask: worst?.label ?? null,
+      weeklyFocus: weeklyFocus[isoWeekKey()] ?? null,
+      tastes: [],
+    };
+  }
+
+  const streak = questStreak(useAppStore.getState().profile.quests, dateKey);
+
+  function blockQuest(q: DailyQuest) {
+    const now = new Date();
+    const slot = new Date(now.getTime() + 30 * 60 * 1000);
+    slot.setSeconds(0, 0);
+    const hh = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    addTimeBlock(new Date().toISOString().slice(0, 10), {
+      startTime: hh(slot),
+      endTime: hh(new Date(slot.getTime() + 30 * 60 * 1000)),
+      label: q.title.slice(0, 140),
+      lifeArea: pillarFor(questPillars, q.focus).lifeArea ?? "productivity",
+    });
+    feedback.complete(null);
+  }
+
   return (
     <Card className="mt-4 border-2" style={{ borderColor: "var(--color-ember)" }}>
-      <div className="flex items-center gap-1.5">
-        <Swords size={14} color="var(--color-ember)" />
-        <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ember)" }}>
-          Today's quests
-        </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <Swords size={14} color="var(--color-ember)" />
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ember)" }}>
+            Today's quests
+          </p>
+        </div>
+        {streak > 0 && (
+          <span
+            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold"
+            style={{ background: "var(--color-ember-soft)", color: "var(--color-ember)" }}
+          >
+            <Flame size={10} /> {streak}-day quest streak
+          </span>
+        )}
       </div>
       <p className="mt-1 text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
         Toward {incomeGoal.min.toLocaleString()}–{incomeGoal.max.toLocaleString()} {incomeGoal.currency}/month by{" "}
@@ -154,6 +220,7 @@ export function QuestBoard({ dateKey, isToday }: { dateKey: string; isToday: boo
               const ok = rerollQuest(dateKey, q.id, replacement);
               if (ok) feedback.tap();
             }}
+            onBlock={() => blockQuest(q)}
           />
         ))}
       </div>

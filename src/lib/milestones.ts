@@ -1,5 +1,6 @@
 import type { UserProfile, Milestone } from "@/types";
 import { programDayFromDate } from "@/lib/planGenerator";
+import { questStreak } from "@/lib/quests";
 
 interface MilestoneDef {
   id: string;
@@ -94,6 +95,12 @@ const MILESTONE_DEFS: MilestoneDef[] = [
     label: "7 journal entries",
     description: "A week of honest daily reflection. That's the habit that makes the rest stick.",
     check: (p) => Object.keys(p.journal).length >= 7,
+  },
+  {
+    id: "quest_streak_7",
+    label: "7-day quest streak",
+    description: "A full week of completing every daily quest. The pillars aren't decoration — they're working.",
+    check: (p) => questStreak(p.quests, new Date().toISOString().slice(0, 10)) >= 7,
   },
 ];
 

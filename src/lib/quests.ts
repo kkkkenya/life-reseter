@@ -53,6 +53,39 @@ export function focusPairForDate(
 
 const QUEST_XP_BASE = 40;
 
+function keyOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function allDone(dayQuests: DailyQuest[] | undefined): boolean {
+  return Array.isArray(dayQuests) && dayQuests.length > 0 && dayQuests.every((q) => q.status === "done");
+}
+
+/** Consecutive days (ending today or yesterday — today still open doesn't
+ *  break it) where every quest was completed. Shown on the QuestBoard and
+ *  worth a milestone at 7. */
+export function questStreak(quests: Record<string, DailyQuest[]>, todayIso: string, cap = 366): number {
+  const cursor = new Date(todayIso + "T00:00:00");
+  if (Number.isNaN(cursor.getTime())) return 0;
+  if (!allDone(quests[keyOf(cursor)])) cursor.setDate(cursor.getDate() - 1); // today is still open
+  let streak = 0;
+  while (allDone(quests[keyOf(cursor)]) && streak < cap) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+/** What the quests should know about your actual week, beyond the persona. */
+export interface QuestContext {
+  /** The task most often skipped this week — quests should attack it. */
+  mostSkippedTask?: string | null;
+  /** This week's stated focus, if set. */
+  weeklyFocus?: string | null;
+  /** Tastes from onboarding — quests may lean on them. */
+  tastes?: string[];
+}
+
 function randomId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -81,11 +114,16 @@ const CURATED_FALLBACK_POOL: Record<string, { title: string; description: string
   ],
 };
 
-/** Generic fallback for custom pillars with no curated pool — built from the pillar's own description. */
-function genericFallback(pillar: QuestPillar): { title: string; description: string } {
+/** Generic fallback for custom pillars with no curated pool — built from the pillar's own description,
+ *  flavored with the user's tastes so custom pillars don't read as boilerplate. */
+function genericFallback(pillar: QuestPillar, tastes: string[] = []): { title: string; description: string } {
+  const flavor =
+    tastes.length > 0
+      ? ` Where it fits, draw on what they're into: ${tastes.slice(0, 3).join(", ")}.`
+      : "";
   return {
     title: `Take action: ${pillar.label}`,
-    description: `Do one concrete, specific thing today toward: ${pillar.description}.`,
+    description: `Do one concrete, specific thing today toward: ${pillar.description}.${flavor}`,
   };
 }
 
@@ -146,7 +184,8 @@ export async function generateDailyQuests(
   pillars: QuestPillar[],
   tone: CoachTone = "blunt",
   aboutMe = "",
-  pinnedFocusArea: LifeAreaKey | null = null
+  pinnedFocusArea: LifeAreaKey | null = null,
+  context: QuestContext = {}
 ): Promise<DailyQuest[]> {
   const focusPair = focusPairForDate(new Date(dateKey + "T00:00:00"), pillars, pinnedFocusArea);
 
@@ -163,10 +202,24 @@ export async function generateDailyQuests(
     ? `Here's what this person has shared about who they are, what they do, and their interests — use it to make quests genuinely specific to them, not generic:\n"""${aboutMe.trim().slice(0, 1500)}"""`
     : "This person hasn't shared background details yet, so keep quests broadly applicable rather than assuming a specific profession or skillset.";
 
+  const contextLines: string[] = [];
+  if (context.mostSkippedTask) {
+    contextLines.push(
+      `This week they keep skipping: "${context.mostSkippedTask}". At least one quest should attack that pattern head-on (a concrete step that unblocks or shrinks it) — quests that dodge what they're avoiding are worthless.`
+    );
+  }
+  if (context.weeklyFocus) {
+    contextLines.push(`Their stated focus this week: "${context.weeklyFocus}" — a quest that visibly serves it beats a random one.`);
+  }
+  if (context.tastes && context.tastes.length > 0) {
+    contextLines.push(`Interests they named: ${context.tastes.join(", ")}. Use these to make quests feel like theirs, where it fits.`);
+  }
+  const contextBlock = contextLines.length > 0 ? "\n" + contextLines.join("\n") + "\n" : "";
+
   const prompt = `Generate exactly 2 daily quests for today (${dateKey}) for someone working toward making ${incomeGoal.min}-${incomeGoal.max} ${incomeGoal.currency} the normal monthly income by ${incomeGoal.targetDate} (${daysLeft} days left).
 
 ${personaLine}
-
+${contextBlock}
 Quest 1 focus: "${focusPair[0].label}" — ${focusPair[0].description}
 Quest 2 focus: "${focusPair[1].label}" — ${focusPair[1].description}
 

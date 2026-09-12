@@ -257,3 +257,91 @@ export function obstacleLabel(value: string): string {
   if (value === "none") return "Nothing — clean week";
   return OBSTACLE_OPTIONS.find((o) => o.value === value)?.label ?? value;
 }
+
+// ---------------------------------------------------------------------------
+// Tone-aware wizard copy — after the user picks a coach voice, the questions
+// themselves speak in it. The voice is demonstrated, not described.
+// ---------------------------------------------------------------------------
+
+export interface StepCopy {
+  title: string;
+  sub: string;
+}
+
+/** Keys cover every wizard step from "matters" onward (i.e. after the vibe
+ *  step — earlier steps establish who you are before asking how to talk). */
+export const TONE_STEP_COPY: Record<string, Record<CoachTone, StepCopy>> = {
+  matters: {
+    gentle: { title: "What do you want more of, daily?", sub: "Pick up to 3 — small daily wins in the areas that quietly matter most." },
+    blunt: { title: "What do you actually want more of?", sub: "Pick up to 3. Not what sounds nice — what you keep failing to make time for." },
+    drill: { title: "Pick your battlefields.", sub: "Up to 3. These become daily non-negotiables. Choose where the pressure goes." },
+    stoic: { title: "What deserves your days?", sub: "Up to 3 pillars. A good life is ordinary actions repeated — choose yours deliberately." },
+  },
+  tastes: {
+    gentle: { title: "What are you into?", sub: "This is how your quests stop feeling generic — tell me what genuinely interests you." },
+    blunt: { title: "What are you actually into?", sub: "Music, machines, football, faith — real answers only. Quests that feel like you beat generic ones every time." },
+    drill: { title: "Name your fuel.", sub: "Up to 10. I'll build quests out of your interests — ones you can't pretend don't excite you." },
+    stoic: { title: "What holds your curiosity?", sub: "List what draws you. Work aligned with curiosity rarely feels like work." },
+  },
+  devotional: {
+    gentle: { title: "Want a Gospel verse each morning?", sub: "Short KJV verse with your day. You can switch it off anytime in Settings." },
+    blunt: { title: "Daily Gospel verse — yes or no?", sub: "Short KJV verse every morning. No guilt either way; it's a toggle, not a test." },
+    drill: { title: "Daily bread: in or out?", sub: "A KJV verse every morning. Decide now — no renegotiating at 6am." },
+    stoic: { title: "A verse to begin the day?", sub: "One KJV line each morning. Ancient steadiness for a loud world." },
+  },
+  rhythm: {
+    gentle: { title: "When do you come alive?", sub: "I'll lean your hardest work into your sharpest hours." },
+    blunt: { title: "When are you actually functional?", sub: "Be honest, not aspirational. Hard work goes into your real peak hours, not the imaginary ones." },
+    drill: { title: "When do you strike?", sub: "Your peak window is where the hard tasks land. Tell me where it is." },
+    stoic: { title: "Know your hours.", sub: "Energy has a rhythm. Name yours, and the demanding work lands inside it." },
+  },
+  quit: {
+    gentle: { title: "Anything you're quitting?", sub: "Tap all that apply. Each gets its own counter from Day 0 — no shame, just tracking." },
+    blunt: { title: "What are you cutting out?", sub: "Tap what applies. Each gets a clock — and the truth about how long you last." },
+    drill: { title: "Name your vices.", sub: "Every one you pick starts a clock today. Quitting begins the moment you tap." },
+    stoic: { title: "What will you live without?", sub: "Choose what leaves. Each becomes a quiet count of days lived free of it." },
+  },
+  vision: {
+    gentle: { title: "One year from now — who are you?", sub: "Paint it like it's already true. This becomes the why pinned to your top focus area." },
+    blunt: { title: "One year from now — who's real?", sub: "Describe the version of you that actually shows up. This becomes the why your goals hang on." },
+    drill: { title: "One year. Who are you?", sub: "Write it like a commitment, not a wish. This line is what I hold you to." },
+    stoic: { title: "The person a year makes.", sub: "Describe who daily practice is making of you. Vision is the compass for every boring Tuesday." },
+  },
+  dream: {
+    gentle: { title: "Ten years. Anything possible. What?", sub: "Forget realistic. This is the dream that makes the discipline worth it." },
+    blunt: { title: "Ten years — the honest fantasy.", sub: "The thing you don't say out loud. Write it down; that's where it starts being possible." },
+    drill: { title: "Ten years. Name it.", sub: "Your North Star. Everything hard this month points at it. Write it like it's inevitable." },
+    stoic: { title: "What is the ten-year aim?", sub: "Name the destination. Discipline without direction is just suffering." },
+  },
+  nightmare: {
+    gentle: { title: "And if nothing changes for 5 years?", sub: "Look at it once, honestly. Then we make sure it never happens." },
+    blunt: { title: "Five years of nothing changing — what does that look like?", sub: "One honest look at the default future. That's the alternative to the work." },
+    drill: { title: "The cost of quitting now.", sub: "Describe the five-year version of you that never started. Let that sting. Use it." },
+    stoic: { title: "Count the cost of stillness.", sub: "See the default future clearly, once. Then choose the harder, better path." },
+  },
+  income: {
+    gentle: { title: "What monthly income are we normalizing?", sub: "Your daily quests quietly pull toward this number. KES, monthly." },
+    blunt: { title: "What's your real monthly number?", sub: "Not the dream number — the one that would make life genuinely easier. Quests pull toward it daily." },
+    drill: { title: "Set the target.", sub: "Min and max, KES monthly. Every daily quest points at this. Give me a number worth hitting." },
+    stoic: { title: "What income is enough?", sub: "Define the range that frees you. Money serves the life you described above." },
+  },
+  tasks: {
+    gentle: { title: "Build your lineup", sub: "I picked 20 for you — take at least 3, and tap a picked one to set days per week." },
+    blunt: { title: "Pick your daily work.", sub: "Minimum 3. Don't pick what you wish you'd do — pick what you'll actually finish." },
+    drill: { title: "Assemble the lineup.", sub: "Minimum 3. Each gets days-per-week. This is the contract's fine print." },
+    stoic: { title: "Choose your practices.", sub: "At least 3. The few, repeated, beat the many, abandoned. Set each one's rhythm." },
+  },
+  start: {
+    gentle: { title: "Ready when you are.", sub: "Pick a start date. Then we begin — one day at a time, and I've got you." },
+    blunt: { title: "Pick a date. Let's go.", sub: "Today beats Monday. Choose the day you start being accountable." },
+    drill: { title: "Day zero. Commit.", sub: "Pick the date. After this the odometer runs — I accept progress, not excuses." },
+    stoic: { title: "Begin.", sub: "Choose the day. From it, one day at a time — the whole path is the next step, repeated." },
+  },
+};
+
+/** Wizard copy for a step in the chosen voice; falls back to the neutral copy
+ *  written inline in Setup before the vibe step has been answered. */
+export function stepCopy(step: string, tone: CoachTone | null, fallback: StepCopy): StepCopy {
+  if (!tone) return fallback;
+  return TONE_STEP_COPY[step]?.[tone] ?? fallback;
+}
