@@ -34,16 +34,45 @@ function mediaSummary(media?: JournalMediaRef[]): string | null {
   return bits.join(" · ") || null;
 }
 import { askGemini, isGeminiConfigured } from "@/lib/gemini";
-import { coachVoice } from "@/data/coachTones";
+import { verseOfTheDay } from "@/data/gospel";
+import { GospelCard } from "@/pages/today/GospelCard";
 
 export default function Journal() {
   const profile = useAppStore((s) => s.profile);
   const saveJournalEntry = useAppStore((s) => s.saveJournalEntry);
+  const setDailyGospel = useAppStore((s) => s.setDailyGospel);
 
+  const todayIso = new Date().toISOString().slice(0, 10);
   const todayDay = profile.startDate
     ? programDayFromDate(profile.startDate, new Date().toISOString().slice(0, 10))
     : 1;
   const existing = profile.journal[todayDay];
+  const devotional = profile.devotional;
+  const firstName = profile.displayName.trim().split(/\s+/)[0] || "";
+
+  // Daily Gospel verse: generated once per day (with a one-shot AI reflection
+  // when configured), then stored — the same pipe the old Examen page ran.
+  const [verseReflecting, setVerseReflecting] = useState(false);
+  useEffect(() => {
+    if (!devotional.enabled) return;
+    if (profile.dailyGospel[todayIso]) return;
+    const verse = verseOfTheDay(new Date(), devotional.mode);
+    setDailyGospel(todayIso, verse.ref, verse.text);
+    if (isGeminiConfigured) {
+      setVerseReflecting(true);
+      askGemini(`Verse: "${verse.text}" (${verse.ref})`, {
+        systemInstruction:
+          `You are a Catholic reflection companion writing for ${firstName || "a friend"} working on becoming their best self. ` +
+          "In 2 sentences, tie this Gospel verse to daily discipline and self-mastery. Warm and direct, like a best friend who refuses to let them settle. Reverent, plain language, no cliches.",
+        temperature: 0.7,
+        maxOutputTokens: 120,
+      })
+        .then((text) => setDailyGospel(todayIso, verse.ref, verse.text, text))
+        .catch(() => {})
+        .finally(() => setVerseReflecting(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayIso, devotional.enabled, devotional.mode]);
 
   const [morningEnergy, setMorningEnergy] = useState(existing?.morningEnergy ?? 3);
   const [gratitude, setGratitude] = useState(existing?.gratitude ?? "");
@@ -257,7 +286,8 @@ export default function Journal() {
       const who = profile.displayName.trim() ? `${profile.displayName.trim().split(/\s+/)[0]}'s` : "my";
       const prompt = `Here's ${who} reflection for today:\nWent well: ${wentWell || "(nothing noted)"}\nCould improve: ${couldImprove || "(nothing noted)"}\nTomorrow's win: ${tomorrowWin || "(nothing noted)"}\nMood: ${mood}/10`;
       const text = await askGemini(prompt, {
-        systemInstruction: `${coachVoice(profile.coachTone)} Respond in 2-4 sentences to this journal entry like a best friend who wants them to become their best self — warm, in their corner, but unwilling to let them slide. Don't just validate — if something in the entry deserves a pointed follow-up question or a push, give it.`,
+        systemInstruction:
+          "Respond in 2-4 sentences to this journal entry like a best friend who wants them to become their best self — warm, in their corner, but unwilling to let them slide. Don't just validate — if something in the entry deserves a pointed follow-up question or a push, give it.",
         temperature: 0.7,
         maxOutputTokens: 200,
       });
@@ -275,6 +305,9 @@ export default function Journal() {
 
   return (
     <div>
+      {devotional.enabled && profile.dailyGospel[todayIso] && (
+        <GospelCard gospel={profile.dailyGospel[todayIso]} reflecting={verseReflecting} />
+      )}
       <Card>
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
           Morning check-in
