@@ -76,6 +76,8 @@ export default function Journal() {
 
   const [morningEnergy, setMorningEnergy] = useState(existing?.morningEnergy ?? 3);
   const [gratitude, setGratitude] = useState(existing?.gratitude ?? "");
+  const [sleepHours, setSleepHours] = useState<string>(existing?.sleepHours !== undefined ? String(existing.sleepHours) : "");
+  const [workoutMinutes, setWorkoutMinutes] = useState<string>(existing?.workoutMinutes !== undefined ? String(existing.workoutMinutes) : "");
   const [morningSaved, setMorningSaved] = useState(false);
 
   const [wentWell, setWentWell] = useState(existing?.wentWell ?? "");
@@ -157,7 +159,14 @@ export default function Journal() {
   const [reflectError, setReflectError] = useState<string | null>(null);
 
   function saveMorning() {
-    saveJournalEntry(todayDay, { morningEnergy, gratitude });
+    const sleep = Number(sleepHours);
+    const workout = Number(workoutMinutes);
+    saveJournalEntry(todayDay, {
+      morningEnergy,
+      gratitude,
+      sleepHours: sleepHours.trim() && Number.isFinite(sleep) ? Math.min(24, Math.max(0, sleep)) : undefined,
+      workoutMinutes: workoutMinutes.trim() && Number.isFinite(workout) ? Math.max(0, Math.round(workout)) : undefined,
+    });
     setMorningSaved(true);
     setTimeout(() => setMorningSaved(false), 1800);
   }
@@ -337,6 +346,36 @@ export default function Journal() {
             className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
           />
+        </div>
+        <div className="mt-3 flex gap-2">
+          <div className="flex-1">
+            <p className="mb-1.5 text-sm font-medium">Sleep last night (hours)</p>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={24}
+              step={0.5}
+              value={sleepHours}
+              onChange={(e) => setSleepHours(e.target.value)}
+              placeholder="7.5"
+              className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
+            />
+          </div>
+          <div className="flex-1">
+            <p className="mb-1.5 text-sm font-medium">Workout (minutes)</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={workoutMinutes}
+              onChange={(e) => setWorkoutMinutes(e.target.value)}
+              placeholder="0 = rest day"
+              className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
+            />
+          </div>
         </div>
         <div className="mt-3">
           <PrimaryButton onClick={saveMorning}>

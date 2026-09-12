@@ -13,8 +13,6 @@ import type {
   ObjectiveHorizon,
   PlannedTask,
   RecurrenceRule,
-  SleepLog,
-  StatKey,
   StreakHabit,
   DetoxHabit,
   DetoxHabitType,
@@ -24,7 +22,6 @@ import type {
   TimeBlock,
   TimeOfDay,
   UserProfile,
-  VentureLog,
   QuizAnswers,
   CheckInRecord,
   ClassSession,
@@ -33,7 +30,6 @@ import type {
   CorrelationSnapshotEntry,
 } from "@/types";
 import { buildCalendar, distributeWeekdays, xpForTask, programDayFromDate } from "@/lib/planGenerator";
-import { RANK_TIERS } from "@/types";
 import { EMPTY_GOALS, emptyGoalTarget, getLifeArea, OBJECTIVE_HORIZONS } from "@/data/lifeAreas";
 import { STREAK_TEMPLATES } from "@/data/streakDefaults";
 import { evaluateMilestones } from "@/lib/milestones";
@@ -100,7 +96,7 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
   return {
     ...base,
     ...p,
-    tools: { ...base.tools, ...(p.tools ?? {}) },
+    pomodoroSessions: typeof p.pomodoroSessions === "number" ? p.pomodoroSessions : 0,
     goals: (() => {
       const merged = { ...EMPTY_GOALS };
       (Object.keys(EMPTY_GOALS) as LifeAreaKey[]).forEach((key) => {
@@ -150,12 +146,9 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
         }))
       : [],
     timeBlocks: p.timeBlocks ?? {},
-    ventureLogs: Array.isArray(p.ventureLogs) ? p.ventureLogs : [],
-    sleepLogs: Array.isArray(p.sleepLogs) ? p.sleepLogs : [],
     mitByDay: p.mitByDay ?? {},
     weeklyFocus: p.weeklyFocus ?? {},
     eveningPlanned: p.eveningPlanned ?? {},
-    dayCompleteShown: p.dayCompleteShown ?? {},
     skipReasons: p.skipReasons ?? {},
     dailyGospel: p.dailyGospel ?? {},
     weeklyReports: p.weeklyReports ?? {},
@@ -171,16 +164,11 @@ const emptyProfile: UserProfile = {
   dream: "",
   aboutMe: "",
   quiz: null,
-  resetType: null,
-  stats: { wisdom: 42, confidence: 42, strength: 42, discipline: 42, focus: 42 },
-  vow: { antiVision: "", vowText: "", signedAt: null },
   tasks: [],
   startDate: null,
+  pomodoroSessions: 0,
   days: {},
   xpTotal: 0,
-  season: { seasonNumber: 1, startDate: todayIso(), durationDays: 24, xpThisSeason: 0 },
-  difficultyMultiplier: 1,
-  tools: { workoutLog: [], meditationMinutes: 0, pomodoroSessions: 0, bookProgress: {} },
   streaks: [],
   detoxHabits: [],
   journal: {},
@@ -196,12 +184,9 @@ const emptyProfile: UserProfile = {
   classes: [],
   deadlines: [],
   timeBlocks: {},
-  ventureLogs: [],
-  sleepLogs: [],
   mitByDay: {},
   weeklyFocus: {},
   eveningPlanned: {},
-  dayCompleteShown: {},
   skipReasons: {},
   dailyGospel: {},
   weeklyReports: {},
@@ -238,19 +223,12 @@ interface AppState {
   removeTask: (uid: string) => void;
   updateTaskFrequency: (uid: string, freq: number) => void;
   startProgram: (startDateOverride?: string) => void;
-  setDifficulty: (mult: number) => void;
-  setSeasonDuration: (days: number) => void;
-  setVowAntiVision: (text: string) => void;
-  signVow: (vowText: string) => void;
   completeTask: (day: number, uid: string) => void;
   skipTask: (day: number, uid: string, reason?: string) => void;
   regenerateCalendar: () => void;
   resetAll: () => void;
   markOnboarded: () => void;
-  logWorkoutSet: (label: string, sets: number, reps: number) => void;
-  addMeditationMinutes: (mins: number) => void;
   logPomodoroSession: () => void;
-  setBookProgress: (bookId: string, chapter: number) => void;
   seedStreaksFromQuiz: () => void;
   seedStreaksFromSelection: (templateValues: string[]) => void;
   addStreakHabit: (
@@ -303,10 +281,6 @@ interface AppState {
   /** Copies an incomplete block from one date to another (used for "carry over to today"), removing it from the source. */
   moveTimeBlock: (fromDate: string, id: string, toDate: string) => void;
   setEveningPlanned: (dateKey: string, done: boolean) => void;
-  /** Marks today's "all tasks done" popup as shown so it only fires once per calendar date. */
-  markDayCompleteShown: (dateKey: string) => void;
-  addVentureLog: (venture: string, minutes: number) => void;
-  addSleepLog: (bedtime: string, waketime: string) => void;
   setMit: (day: number, entry: MitEntry) => void;
   toggleMitDone: (day: number) => void;
   setWeeklyFocus: (weekKey: string, text: string) => void;
@@ -412,27 +386,10 @@ export const useAppStore = create<AppState>()(
               ...s.profile,
               startDate: start,
               days,
-              season: { ...s.profile.season, startDate: start },
             },
           };
         });
       },
-
-      setDifficulty: (mult) => set((s) => ({ profile: { ...s.profile, difficultyMultiplier: mult } })),
-
-      setSeasonDuration: (days) =>
-        set((s) => ({ profile: { ...s.profile, season: { ...s.profile.season, durationDays: days } } })),
-
-      setVowAntiVision: (text) =>
-        set((s) => ({ profile: { ...s.profile, vow: { ...s.profile.vow, antiVision: text } } })),
-
-      signVow: (vowText) =>
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            vow: { ...s.profile.vow, vowText, signedAt: new Date().toISOString() },
-          },
-        })),
 
       completeTask: (day, uid) => {
         set((s) => {
@@ -451,7 +408,6 @@ export const useAppStore = create<AppState>()(
               ...s.profile,
               days: { ...s.profile.days, [day]: updatedRec },
               xpTotal: s.profile.xpTotal + xp,
-              season: { ...s.profile.season, xpThisSeason: s.profile.season.xpThisSeason + xp },
             },
           };
         });
@@ -481,49 +437,8 @@ export const useAppStore = create<AppState>()(
 
       markOnboarded: () => set((s) => ({ profile: { ...s.profile, onboarded: true } })),
 
-      logWorkoutSet: (label, sets, reps) => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            tools: {
-              ...s.profile.tools,
-              workoutLog: [
-                { id: `${Date.now()}`, date: todayIso(), label, sets, reps },
-                ...s.profile.tools.workoutLog,
-              ].slice(0, 50),
-            },
-          },
-        }));
-      },
-
-      addMeditationMinutes: (mins) => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            tools: { ...s.profile.tools, meditationMinutes: s.profile.tools.meditationMinutes + mins },
-          },
-        }));
-      },
-
       logPomodoroSession: () => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            tools: { ...s.profile.tools, pomodoroSessions: s.profile.tools.pomodoroSessions + 1 },
-          },
-        }));
-      },
-
-      setBookProgress: (bookId, chapter) => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            tools: {
-              ...s.profile.tools,
-              bookProgress: { ...s.profile.tools.bookProgress, [bookId]: chapter },
-            },
-          },
-        }));
+        set((s) => ({ profile: { ...s.profile, pomodoroSessions: s.profile.pomodoroSessions + 1 } }));
       },
 
       seedStreaksFromQuiz: () => {
@@ -701,6 +616,8 @@ export const useAppStore = create<AppState>()(
             mood: entry.mood ?? existing?.mood ?? 5,
             morningEnergy: entry.morningEnergy ?? existing?.morningEnergy,
             gratitude: entry.gratitude ?? existing?.gratitude,
+            sleepHours: entry.sleepHours ?? existing?.sleepHours,
+            workoutMinutes: entry.workoutMinutes ?? existing?.workoutMinutes,
             examen: entry.examen ?? existing?.examen,
             media: entry.media ?? existing?.media ?? [],
             savedAt: nowIso(),
@@ -997,37 +914,6 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      markDayCompleteShown: (dateKey) => {
-        set((s) => ({
-          profile: { ...s.profile, dayCompleteShown: { ...s.profile.dayCompleteShown, [dateKey]: true } },
-        }));
-      },
-
-      addVentureLog: (venture, minutes) => {
-        const entry: VentureLog = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          date: todayIso(),
-          venture,
-          minutes,
-        };
-        set((s) => ({ profile: { ...s.profile, ventureLogs: [entry, ...s.profile.ventureLogs].slice(0, 500) } }));
-      },
-
-      addSleepLog: (bedtime, waketime) => {
-        const [bh, bm] = bedtime.split(":").map(Number);
-        const [wh, wm] = waketime.split(":").map(Number);
-        let hours = wh + wm / 60 - (bh + bm / 60);
-        if (hours <= 0) hours += 24;
-        const entry: SleepLog = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          date: todayIso(),
-          bedtime,
-          waketime,
-          hours: Math.round(hours * 10) / 10,
-        };
-        set((s) => ({ profile: { ...s.profile, sleepLogs: [entry, ...s.profile.sleepLogs].slice(0, 200) } }));
-      },
-
       setMit: (day, entry) => {
         set((s) => ({ profile: { ...s.profile, mitByDay: { ...s.profile.mitByDay, [day]: entry } } }));
       },
@@ -1089,24 +975,8 @@ export const useAppStore = create<AppState>()(
   )
 );
 
-export function currentRankTier(xpThisSeason: number) {
-  let tier = RANK_TIERS[0];
-  for (const t of RANK_TIERS) {
-    if (xpThisSeason >= t.min) tier = t;
-  }
-  return tier;
-}
-
-export function nextRankTier(xpThisSeason: number) {
-  for (const t of RANK_TIERS) {
-    if (xpThisSeason < t.min) return t;
-  }
-  return null;
-}
-
 export function todayProgramDay(profile: UserProfile): number {
   if (!profile.startDate) return 1;
   return programDayFromDate(profile.startDate, new Date().toISOString().slice(0, 10));
 }
 
-export type { StatKey };

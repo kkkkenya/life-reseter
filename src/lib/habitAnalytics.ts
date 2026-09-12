@@ -76,14 +76,6 @@ function buildDaySignals(profile: UserProfile): DaySignal[] {
   const dayByDate = new Map<string, number>();
   Object.values(profile.days).forEach((rec) => dayByDate.set(rec.date, rec.day));
 
-  const sleepByDay = new Map<number, boolean>();
-  Object.values(profile.days).forEach((rec) => sleepByDay.set(rec.day, false));
-  profile.sleepLogs.forEach((log) => {
-    const day = dayByDate.get(log.date);
-    if (day !== undefined) sleepByDay.set(day, true);
-  });
-  if (sleepByDay.size > 0) signals.push({ label: "logging your sleep", byDay: sleepByDay });
-
   const journalByDay = new Map<number, boolean>();
   Object.values(profile.days).forEach((rec) => journalByDay.set(rec.day, false));
   Object.keys(profile.journal).forEach((dayKey) => {
@@ -399,53 +391,3 @@ export function frequencyRebalanceSuggestions(profile: UserProfile, maxResults =
   return results.slice(0, maxResults);
 }
 
-const SEASON_MIN_DAYS = 14;
-const SEASON_MAX_DAYS = 40;
-const SEASON_BASE_DAYS = 24;
-const SEASON_MIN_SAMPLES = 7; // don't re-pace off less than a week of data
-
-export interface SeasonPacing {
-  suggestedDurationDays: number;
-  rate: number;
-  scheduled: number;
-  pace: "ahead" | "on-pace" | "behind";
-}
-
-/**
- * Paces the current season's length off the player's own recent completion
- * rate instead of a fixed curve: a high completion rate shortens the season
- * (momentum — let them hit the finish line and start the next one), a low
- * rate lengthens it (room to actually complete the arc instead of resetting
- * on a loss). Bounded so a single great or bad week can't send it to an
- * extreme.
- */
-export function computeSeasonPacing(profile: UserProfile): SeasonPacing | null {
-  if (!profile.startDate) return null;
-  const todayProgramDay = programDayFromDate(profile.startDate, new Date().toISOString().slice(0, 10));
-  const seasonStartDay = programDayFromDate(profile.startDate, profile.season.startDate);
-
-  let done = 0;
-  let scheduled = 0;
-  for (let d = Math.max(1, seasonStartDay); d <= todayProgramDay; d++) {
-    const rec = profile.days[d];
-    if (!rec) continue;
-    Object.values(rec.tasks).forEach((status) => {
-      if (status === "pending") return;
-      scheduled++;
-      if (status === "done") done++;
-    });
-  }
-
-  if (scheduled < SEASON_MIN_SAMPLES) return null;
-  const rate = done / scheduled;
-
-  // Linear scale: 100% completion -> SEASON_MIN_DAYS, 0% -> SEASON_MAX_DAYS,
-  // anchored so ~65% completion lands close to the original fixed 24-day baseline.
-  const raw = SEASON_MAX_DAYS - rate * (SEASON_MAX_DAYS - SEASON_MIN_DAYS);
-  const suggestedDurationDays = Math.round(Math.min(SEASON_MAX_DAYS, Math.max(SEASON_MIN_DAYS, raw)));
-
-  const pace: SeasonPacing["pace"] =
-    suggestedDurationDays < SEASON_BASE_DAYS - 2 ? "ahead" : suggestedDurationDays > SEASON_BASE_DAYS + 2 ? "behind" : "on-pace";
-
-  return { suggestedDurationDays, rate, scheduled, pace };
-}
