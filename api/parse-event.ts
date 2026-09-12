@@ -3,38 +3,22 @@
 // prefix) is only readable here via process.env, same rule as api/gemini.ts.
 // The uploaded image is forwarded to Gemini for one-shot extraction and is
 // never stored — see README "Event scanning" section.
+import { asDate, asTime, stripFences } from "../src/lib/eventPipeline";
+import { clientIp, rateLimit, sameOrigin } from "../src/lib/apiGuard";
+
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 
 const MAX_BASE64_CHARS = 7_000_000; // ~5MB of image bytes
+const MAX_BODY_BYTES = 8_000_000; // base64 + JSON envelope — reject before buffering
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-function stripFences(s: string): string {
-  const t = s.trim();
-  if (!t.startsWith("```")) return t;
-  return t
-    .replace(/^```[a-zA-Z]*\s*/, "")
-    .replace(/\s*```\s*$/, "")
-    .trim();
-}
+const MAX_SCANS_PER_HOUR = 12; // per IP — poster scans are an occasional user action
 
 function asTrimmed(v: unknown, max = 140): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim();
   if (!t) return null;
   return t.slice(0, max);
-}
-
-function asDate(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  const t = v.trim().slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
-}
-
-function asTime(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  const t = v.trim().slice(0, 5);
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null;
 }
 
 const LIFE_AREAS = new Set([
@@ -52,8 +36,23 @@ export default async function handler(req: any, res: any) {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
+  if (!sameOrigin(req)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   if (!API_KEY) {
     res.status(501).json({ error: "Gemini isn't configured on the server (GEMINI_API_KEY missing)." });
+    return;
+  }
+  // Reject oversized uploads from the declared Content-Length before the
+  // body is buffered at all; the per-field check below still applies.
+  const contentLength = Number(req.headers?.["content-length"] ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    res.status(413).json({ error: "Image is too large. Try a smaller screenshot (under ~5MB)." });
+    return;
+  }
+  if (!rateLimit(`scan:${clientIp(req)}`, MAX_SCANS_PER_HOUR, 60 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many scans — try again in a bit." });
     return;
   }
 
@@ -86,10 +85,12 @@ export default async function handler(req: any, res: any) {
     `"location":string|null,"notes":string|null,"lifeArea":string,"confidence":number,"clarifyingQuestions":string[]}`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+    // Key goes in the x-goog-api-key header, never the URL — keys in query
+    // strings leak into logs and intermediary proxies.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
     const upstream = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": API_KEY },
       body: JSON.stringify({
         contents: [
           {

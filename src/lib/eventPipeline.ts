@@ -263,18 +263,18 @@ export async function collectDirectEvents(weekStart: string, weekEnd: string): P
 
 // ------------------------------------------------------------------- AI online fill
 
-function stripFences(s: string): string {
+export function stripFences(s: string): string {
   const t = s.trim();
   if (!t.startsWith("```")) return t;
   return t.replace(/^```[a-zA-Z]*\s*/, "").replace(/\s*```\s*$/, "").trim();
 }
 
-function asDate(v: unknown): string | null {
+export function asDate(v: unknown): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim().slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
 }
-function asTime(v: unknown): string | null {
+export function asTime(v: unknown): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim().slice(0, 5);
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null;
@@ -351,18 +351,21 @@ export async function collectAiEvents(
     `(Africa-friendly time zones, remote-friendly, free). ` +
     `Only include events you believe genuinely exist with a real registration/info page — never invent titles, dates, or URLs. ` +
     `If unsure about a URL, omit the event rather than guessing. Prefer free community events, workshops, and livestreams. ` +
+    `endDate: for multi-day events (hackathons, summits, bootcamps) the LAST day as YYYY-MM-DD; null for single-day events. ` +
     `For each event also judge cost (isFree true/false/null + short priceText like "Free" or "$10") ` +
     `and pick up to 3 topics from exactly: AI, Web Dev, Mobile, Data, Cloud/DevOps, Cybersecurity, Startups, Design, Blockchain, Career. ` +
     `Max 10 events. Respond with JSON ONLY, no markdown: a bare array where each item matches exactly ` +
-    `{"title":string,"date":"YYYY-MM-DD","startTime":"HH:MM"|null,"endTime":"HH:MM"|null,` +
+    `{"title":string,"date":"YYYY-MM-DD","endDate":"YYYY-MM-DD"|null,"startTime":"HH:MM"|null,"endTime":"HH:MM"|null,` +
     `"city":string|null,"venue":string|null,"isOnline":true,"url":string|null,"source":string|null,` +
     `"isFree":boolean|null,"priceText":string|null,"topics":string[]}`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    // Key goes in the x-goog-api-key header, never the URL — keys in query
+    // strings leak into logs and intermediary proxies.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
     const upstream = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: instruction }] }],
         generationConfig: { temperature: 0.3, maxOutputTokens: 1500, thinkingConfig: { thinkingLevel: "low" } },
@@ -394,10 +397,11 @@ export async function collectAiEvents(
       const key = `${title.toLowerCase()}|${date}`;
       if (seen.has(key)) continue;
       seen.add(key);
+      const endDate = asDate(r.endDate);
       events.push({
         title,
         date,
-        endDate: null,
+        endDate: endDate && endDate >= date ? endDate : null,
         startTime: asTime(r.startTime),
         endTime: asTime(r.endTime),
         city: asText(r.city, 60),
