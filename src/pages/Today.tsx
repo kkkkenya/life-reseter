@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Check, Plus, Star, CalendarClock, CalendarDays, List } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, Star, CalendarClock, List } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { IconFor } from "@/components/IconFor";
 import { useFeedback } from "@/hooks/useFeedback";
@@ -18,7 +18,6 @@ import { TaskList, type TaskEntry } from "@/pages/today/TaskList";
 import { AddTaskSheet } from "@/pages/today/AddTaskSheet";
 import { MitPickerSheet } from "@/pages/today/MitPickerSheet";
 import { ScheduleView, type RolloverCandidate } from "@/pages/today/ScheduleView";
-import { CalendarGrid } from "@/pages/today/CalendarGrid";
 import { EventScanSheet } from "@/pages/today/EventScanSheet";
 import { QuestBoard } from "@/pages/today/QuestBoard";
 import { DailyReviewCard } from "@/pages/today/DailyReviewCard";
@@ -58,7 +57,7 @@ export default function Today({
   const [viewDay, setViewDay] = useState(todayProgramDay);
   const [addOpen, setAddOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
-  const [view, setView] = useState<"list" | "schedule" | "calendar">("list");
+  const [view, setView] = useState<"list" | "schedule">("list");
   const [mitPicking, setMitPicking] = useState(false);
 
   const [reviewGenerating, setReviewGenerating] = useState(false);
@@ -325,14 +324,6 @@ export default function Today({
             >
               <CalendarClock size={13} />
             </button>
-            <button
-              onClick={() => setView("calendar")}
-              aria-label="Calendar view"
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium"
-              style={{ background: view === "calendar" ? "var(--color-ember-soft)" : "transparent", color: view === "calendar" ? "var(--color-ember)" : "var(--color-ink-dim)" }}
-            >
-              <CalendarDays size={13} />
-            </button>
           </div>
           <button
             onClick={() => setAddOpen(true)}
@@ -565,21 +556,6 @@ export default function Today({
                 });
               }
               feedback.complete(null);
-            }}
-          />
-        </div>
-      )}
-
-      {view === "calendar" && rec && (
-        <div className="mt-6">
-          <CalendarGrid
-            days={profile.days}
-            viewDate={rec.date}
-            timeBlocks={profile.timeBlocks}
-            onSelectDate={(iso) => {
-              const day = programDayFromDate(profile.startDate!, iso);
-              setViewDay(day);
-              setView("list");
             }}
           />
         </div>
