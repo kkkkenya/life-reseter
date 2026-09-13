@@ -4,35 +4,33 @@ import Income from "@/pages/life/Income";
 import Goals from "@/pages/life/Goals";
 import Settings from "@/pages/life/Settings";
 import CheckIn from "@/pages/life/CheckIn";
-import School from "@/pages/life/School";
 import Journal from "@/pages/life/Journal";
 
-type SubTab = "overview" | "goals" | "finances" | "school" | "journal" | "checkin" | "settings";
+type SubTab = "overview" | "goals" | "finances" | "journal" | "checkin" | "settings";
 
 const TABS: { key: SubTab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "goals", label: "Goals" },
   { key: "finances", label: "Finances" },
-  { key: "school", label: "School" },
   { key: "journal", label: "Journal" },
   { key: "checkin", label: "Check-in" },
   { key: "settings", label: "Settings" },
 ];
 
 /**
- * Compass — where your life is actually headed. Groups goals, finances, and
- * the life-area overview, since all three answer the same question: am I
- * moving toward what I said mattered.
+ * Life — the weekly view of yourself: goals, finances, journal, check-ins and
+ * the overview that ties them together. Everything here is reviewed on a
+ * rhythm (weekly or monthly), not browsed daily.
  */
-export default function Compass() {
+export default function Life() {
   const [sub, setSub] = useState<SubTab>("overview");
 
   return (
     <div className="mx-auto w-full max-w-md px-5 pb-28 pt-14 lg:max-w-3xl lg:px-10 lg:pb-16">
       <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
-        Where you're headed
+        The longer view
       </p>
-      <h1 className="font-display text-2xl font-semibold">Compass</h1>
+      <h1 className="font-display text-2xl font-semibold">Life</h1>
 
       <div className="mt-4 flex gap-1.5 overflow-x-auto">
         {TABS.map((t) => {
@@ -58,7 +56,6 @@ export default function Compass() {
         {sub === "overview" && <Overview />}
         {sub === "goals" && <Goals />}
         {sub === "finances" && <Income />}
-        {sub === "school" && <School />}
         {sub === "journal" && <Journal />}
         {sub === "checkin" && <CheckIn />}
         {sub === "settings" && <Settings />}

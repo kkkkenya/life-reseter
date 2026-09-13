@@ -61,3 +61,4 @@ Streaks: ${streakLines || "none tracked"}
 Income logged this month so far: ${incomeThisMonth} KES (target floor: 50,000 KES/month)
 Average mood this week: ${avgMood}/10`;
 }
+

@@ -31,7 +31,6 @@ export default function WeeklyReview() {
   const markGoalsReviewed = useAppStore((s) => s.markGoalsReviewed);
   const [acknowledged, setAcknowledged] = useState<Set<LifeAreaKey>>(new Set());
   const [expandedArea, setExpandedArea] = useState<LifeAreaKey | null>(null);
-
   // Defensive re-check — Overview decides whether to mount at all, but this keeps the component
   // safe to render standalone too.
   if (!shouldShowWeeklyReview(profile)) return null;

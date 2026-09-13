@@ -20,6 +20,8 @@ import { useFeedback } from "@/hooks/useFeedback";
 import {
   TOPIC_LABELS,
   TECH_HUBS,
+  coveredDays,
+  eventCoversDay,
   eventKey,
   fetchTechEvents,
   getWeekRange,
@@ -231,11 +233,14 @@ export default function Events() {
   const [hubs] = useState<{ name: string; url: string; blurb: string }[]>(() => [...TECH_HUBS]);
   const [aiFill, setAiFill] = useState(0);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [feedNote, setFeedNote] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const week = useMemo(() => getWeekRange(), []);
   const days = useMemo(() => weekDays(week.weekStart), [week.weekStart]);
-  const feedIcs = useMemo(() => icsUrl(week.weekStart, week.weekEnd), [week.weekStart, week.weekEnd]);
+  // Rolling feed: no week params, so the subscription follows the calendar
+  // forward forever instead of pinning the week it was created in.
+  const feedIcs = useMemo(() => icsUrl(), []);
   const feedDownload = useMemo(() => icsUrl(week.weekStart, week.weekEnd, true), [week.weekStart, week.weekEnd]);
 
   async function load(force = false) {
@@ -247,6 +252,13 @@ export default function Events() {
       setEvents(res.events);
       setAiFill(res.aiFill);
       setFetchedAt(res.fetchedAt);
+      setFeedNote(
+        res.stale
+          ? "Offline — showing the last successfully fetched feed."
+          : res.source === "fallback"
+            ? "Couldn't reach the event sources just now. Tap refresh to retry."
+            : null
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't load events.");
     } finally {
@@ -260,17 +272,24 @@ export default function Events() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [gcalNote, setGcalNote] = useState<string | null>(null);
+
   function addToCalendar(ev: TechEvent, el: Element | null) {
     const start = ev.startTime ?? "18:00";
     const [h, m] = start.split(":").map(Number);
     const end =
       ev.endTime ?? `${String(((Number.isFinite(h) ? h : 18) + 1) % 24).padStart(2, "0")}:${String(Number.isFinite(m) ? m : 0).padStart(2, "0")}`;
-    addTimeBlock(ev.date, {
-      startTime: start,
-      endTime: end,
-      label: ev.title.slice(0, 140),
-      lifeArea: "learning",
-    });
+    // The daily planner is per-day: drop a block on each day the event
+    // covers (capped — see coveredDays) so a weekend bootcamp shows on both
+    // days instead of only its start date.
+    for (const d of coveredDays(ev)) {
+      addTimeBlock(d, {
+        startTime: start,
+        endTime: end,
+        label: ev.title.slice(0, 140),
+        lifeArea: "learning",
+      });
+    }
     feedback.complete(el);
     if (gcal.connected) {
       void gcal
@@ -278,13 +297,19 @@ export default function Events() {
           buildEventInsert({
             label: ev.title,
             date: ev.date,
+            endDate: ev.endDate,
             startTime: start,
             endTime: end,
             location: ev.venue ?? ev.city ?? undefined,
             description: ev.url ?? undefined,
           })
         )
-        .catch(() => {});
+        .catch(() => {
+          // Never silently swallow: the event IS in the local schedule, but
+          // the user should know Google didn't get it.
+          setGcalNote(`"${ev.title.slice(0, 40)}" kept locally — Google Calendar add failed. Reconnect via the GCal dot.`);
+          window.setTimeout(() => setGcalNote(null), 6000);
+        });
     }
   }
 
@@ -320,7 +345,7 @@ export default function Events() {
   const visible = base.filter((ev) => {
     if (mode === "kenya" && ev.isOnline) return false;
     if (mode === "online" && !ev.isOnline) return false;
-    if (day !== "all" && ev.date !== day) return false;
+    if (day !== "all" && !eventCoversDay(ev, day)) return false;
     if (city !== "all" && ev.city !== city) return false;
     if (cost === "free" && ev.isFree !== true) return false;
     if (cost === "paid" && ev.isFree !== false) return false;
@@ -485,6 +510,26 @@ export default function Events() {
               </button>
             )}
           </div>
+
+          {gcalNote && (
+            <p
+              className="mt-2.5 rounded-xl border px-3 py-2 text-xs font-medium"
+              style={{ borderColor: "var(--color-bad)", color: "var(--color-bad)", background: "var(--color-ember-soft)" }}
+              role="status"
+            >
+              {gcalNote}
+            </p>
+          )}
+
+          {!loading && feedNote && (
+            <p
+              className="mt-2.5 rounded-xl border px-3 py-2 text-xs font-medium"
+              style={{ borderColor: "var(--color-ember)", color: "var(--color-ember)", background: "var(--color-ember-soft)" }}
+              role="status"
+            >
+              {feedNote}
+            </p>
+          )}
 
           <div className="mt-2.5 flex items-center justify-between">
             <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>

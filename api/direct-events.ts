@@ -19,9 +19,15 @@ export default async function handler(req: any, res: any) {
 
   try {
     const { events, sources } = await collectDirectEvents(weekStart, weekEnd);
+    const failed = sources.filter((s) => !s.ok).length;
     res.setHeader("Cache-Control", "s-maxage=43200, stale-while-revalidate=86400");
-    res.status(200).json({ events, sources, fetchedAt: new Date().toISOString() });
-  } catch {
-    res.status(200).json({ events: [], sources: [], fetchedAt: new Date().toISOString() });
+    // `degraded` tells the client some sources died — an informative 200, not
+    // a silent one: a fully-broken scrape must never read as "no events".
+    res.status(200).json({ events, sources, degraded: failed > 0, fetchedAt: new Date().toISOString() });
+  } catch (e) {
+    // collectDirectEvents catches per-source failures; reaching here means the
+    // whole collect blew up (e.g. the registry itself threw).
+    console.error("[direct-events] collect failed:", e);
+    res.status(502).json({ error: "Event sources unreachable." });
   }
 }

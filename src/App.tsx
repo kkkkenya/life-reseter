@@ -6,14 +6,13 @@ import { useSyncTheme } from "@/hooks/useSyncTheme";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { useCloudSync, type SyncStatus } from "@/hooks/useCloudSync";
 // Route-level code-splitting: each tab loads on demand so the first paint
-// stays light on mobile data (recharts etc. only load when Compass opens).
+// stays light on mobile data (recharts etc. only load when Life opens).
 const Setup = lazy(() => import("@/pages/Setup"));
 const SignIn = lazy(() => import("@/pages/SignIn"));
 const Today = lazy(() => import("@/pages/Today"));
 const Streaks = lazy(() => import("@/pages/Streaks"));
-const Detox = lazy(() => import("@/pages/Detox"));
-const Examen = lazy(() => import("@/pages/Examen"));
-const Compass = lazy(() => import("@/pages/Compass"));
+const CalendarPage = lazy(() => import("@/pages/CalendarPage"));
+const Life = lazy(() => import("@/pages/Life"));
 const Events = lazy(() => import("@/pages/Events"));
 import { BottomNav, type Tab } from "@/components/BottomNav";
 import { SideNav } from "@/components/SideNav";
@@ -208,16 +207,15 @@ export default function App() {
       <SideNav active={tab} onChange={setTab} />
       <div className="lg:pl-64">
         <Suspense fallback={<PageFallback />}>
-          {tab === "today" && <Today onOpenExamen={() => setTab("examen")} onOpenStreaks={() => setStreaksOpen(true)} onOpenDetox={() => setTab("detox")} />}
-        {tab === "examen" && <Examen />}
-        {tab === "detox" && <Detox />}
-        {tab === "compass" && <Compass />}
-        {tab === "events" && <Events />}
-        {streaksOpen && (
-          <div className="fixed inset-0 z-40" style={{ background: "var(--color-bg)" }}>
-            <Streaks onBack={() => setStreaksOpen(false)} />
-          </div>
-        )}
+          {tab === "today" && <Today onOpenStreaks={() => setStreaksOpen(true)} onOpenLife={() => setTab("life")} />}
+          {tab === "calendar" && <CalendarPage />}
+          {tab === "life" && <Life />}
+          {tab === "events" && <Events />}
+          {streaksOpen && (
+            <div className="fixed inset-0 z-40" style={{ background: "var(--color-bg)" }}>
+              <Streaks onBack={() => setStreaksOpen(false)} />
+            </div>
+          )}
         </Suspense>
       </div>
       <BottomNav active={tab} onChange={setTab} />

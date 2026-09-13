@@ -4,6 +4,7 @@ import { Card, Switch, PrimaryButton, GhostButton } from "@/components/ui";
 import { IconFor } from "@/components/IconFor";
 import { useAppStore } from "@/store/useAppStore";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
+import { SchoolImport } from "@/pages/life/SchoolImport";
 import {
   streakRemindersAvailable,
   isPushSupported,
@@ -264,7 +265,7 @@ export default function Settings() {
   const dirty = JSON.stringify(draftPillars) !== JSON.stringify(questPillars);
 
   function updatePillar(i: number, next: QuestPillar) {
-    setDraftPillars((prev) => prev.map((p, idx) => (idx === i ? next : p)));
+    setDraftPillars((prev) => prev.map((pp, idx) => (idx === i ? next : pp)));
   }
 
   function removePillar(i: number) {
@@ -303,7 +304,7 @@ export default function Settings() {
           About you
         </p>
         <p className="mt-1 text-xs" style={{ color: "var(--color-ink-dim)" }}>
-          What you do, what you're working on, your interests. The more detail here, the better the AI can tailor quests to you specifically.
+          What you do, what you're working on, your interests. One honest paragraph about you — it feeds your weekly review and journal reflections.
         </p>
         <Card className="mt-2">
           <textarea
@@ -321,6 +322,8 @@ export default function Settings() {
           )}
         </Card>
       </div>
+
+      <SchoolImport />
 
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
@@ -373,7 +376,7 @@ export default function Settings() {
             <div>
               <p className="text-sm font-semibold">Daily Gospel verse</p>
               <p className="mt-0.5 text-xs" style={{ color: "var(--color-ink-dim)" }}>
-                Show a verse + reflection each day in Examen
+                Show a verse + reflection each day in your Journal
               </p>
             </div>
             <Switch checked={devotional.enabled} onChange={(v) => setDevotionalSettings({ ...devotional, enabled: v })} />
@@ -405,7 +408,7 @@ export default function Settings() {
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
             Quest pillars
           </p>
-          {draftPillars.length !== 3 || JSON.stringify(draftPillars.map((p) => p.key)) !== JSON.stringify(DEFAULT_QUEST_PILLARS.map((p) => p.key)) ? (
+          {draftPillars.length !== 3 || JSON.stringify(draftPillars.map((pp) => pp.key)) !== JSON.stringify(DEFAULT_QUEST_PILLARS.map((pp) => pp.key)) ? (
             <button onClick={() => setDraftPillars(DEFAULT_QUEST_PILLARS)} className="text-[11px] font-medium" style={{ color: "var(--color-ink-faint)" }}>
               Reset to default
             </button>
@@ -416,10 +419,10 @@ export default function Settings() {
         </p>
 
         <div className="mt-3 space-y-3">
-          {draftPillars.map((p, i) => (
+          {draftPillars.map((pp, i) => (
             <PillarEditor
-              key={p.key}
-              pillar={p}
+              key={pp.key}
+              pillar={pp}
               index={i}
               total={draftPillars.length}
               onChange={(next) => updatePillar(i, next)}
@@ -441,7 +444,7 @@ export default function Settings() {
           <div className="mt-3 flex gap-2">
             <PrimaryButton
               onClick={() => {
-                const cleaned = draftPillars.filter((p) => p.label.trim().length > 0);
+                const cleaned = draftPillars.filter((pp) => pp.label.trim().length > 0);
                 if (cleaned.length === 0) return;
                 setQuestPillars(cleaned);
                 setDraftPillars(cleaned);

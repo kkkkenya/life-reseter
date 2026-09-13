@@ -567,3 +567,54 @@ export function parseIcsEvents(ics: string, sourceLabel: string): ParsedEvent[] 
   }
   return out;
 }
+
+
+// ---------------------------------------------------------------------------
+// Cross-source dedup — shared keying used by the pipeline, the client merge,
+// and the weekly-ics route.
+//
+// The old key (title|date) collapsed distinct events that merely shared a
+// generic title ("Tech Meetup" from two orgs on the same day). The key now
+// carries the first token of the venue, so same-venue listings still merge
+// across platforms (vabu "iHub" vs Luma "iHub, Nailab") while
+// different-venue lookalikes stay separate. Venue-less rows only merge with
+// other venue-less rows of the same title+date. AI fill is subordinate: it
+// is dropped when it duplicates ANY directly-fetched event on title+date,
+// venue or not.
+// ---------------------------------------------------------------------------
+
+export function bareEventKey(e: { title: string; date: string }): string {
+  return `${e.title.toLowerCase()}|${e.date}`;
+}
+
+export function dedupeEventKey(e: { title: string; date: string; venue: string | null }): string {
+  const token = e.venue?.trim().toLowerCase().match(/[a-z0-9]+/)?.[0] ?? "";
+  return `${bareEventKey(e)}|${token}`;
+}
+
+/** First-wins merge across sources; callers order direct-first, AI-last.
+ *  Structural over any event shape (ParsedEvent, TechEvent) sharing these fields. */
+export function dedupeEvents<T extends { title: string; date: string; venue: string | null; origin?: string | null }>(
+  events: T[]
+): T[] {
+  const out: T[] = [];
+  const seenVenueKey = new Set<string>();
+  const seenBareNonAi = new Set<string>(); // every direct title+date — AI defers to it
+  const seenSparseBare = new Set<string>(); // venue-less direct title+date — sparse merges with sparse only
+  for (const e of events) {
+    const vk = dedupeEventKey(e);
+    const bk = bareEventKey(e);
+    const isAi = e.origin === "ai";
+    const sparse = vk.endsWith("|");
+    if (seenVenueKey.has(vk)) continue;
+    if (isAi && seenBareNonAi.has(bk)) continue; // direct truth wins over AI fill
+    if (sparse && seenSparseBare.has(bk)) continue;
+    seenVenueKey.add(vk);
+    if (!isAi) {
+      seenBareNonAi.add(bk);
+      if (sparse) seenSparseBare.add(bk);
+    }
+    out.push(e);
+  }
+  return out;
+}

@@ -1,4 +1,5 @@
 import { isValidIsoDate } from "./parseEvent";
+import { bareEventKey, dedupeEventKey, dedupeEvents } from "./eventParsers";
 import { recordSourceHealth } from "./eventHealth";
 
 export interface TechEvent {
@@ -40,6 +41,7 @@ export interface TechEventsResult {
   aiFill: number; // how many items came from the clearly-badged AI online fill
   source: "direct" | "fallback" | "cache";
   fetchedAt: string; // ISO datetime
+  stale?: boolean; // true when this is the last good feed served after a failed refresh
 }
 
 // Static hubs — deterministic links, always shown as backup.
@@ -59,16 +61,50 @@ export const MAX_EVENTS_PER_PULL = 20;
 
 const SAVED_KEY = "life-reset-saved-events";
 
-export function eventKey(ev: Pick<TechEvent, "title" | "date">): string {
-  return `${ev.title.toLowerCase()}|${ev.date}`;
+/** Identity used for React keys + saved-event bookmarks. Venue-token keying
+ *  keeps same-title lookalikes from colliding (see eventParsers.dedupeEventKey). */
+export function eventKey(ev: Pick<TechEvent, "title" | "date" | "venue">): string {
+  return dedupeEventKey(ev);
 }
 
-/** Link to the .ics export of this week's feed. `download` forces a file save
- *  instead of the browser handing it to the calendar app (webcal/import). */
-export function icsUrl(weekStart: string, weekEnd: string, download = false): string {
-  const q = new URLSearchParams({ weekStart, weekEnd });
+/** True when the event happens on `day` — including multi-day events, which
+ *  must show under every day they span, not just their start date. */
+export function eventCoversDay(ev: Pick<TechEvent, "date" | "endDate">, day: string): boolean {
+  if (ev.date === day) return true;
+  return Boolean(ev.endDate && ev.endDate > ev.date && ev.date < day && ev.endDate >= day);
+}
+
+/** ISO dates an event covers, earliest first. Capped so "Add to calendar"
+ *  on a 2-month hackathon doesn't flood the daily planner with blocks. */
+export function coveredDays(ev: Pick<TechEvent, "date" | "endDate">, cap = 3): string[] {
+  const out = [ev.date];
+  if (!ev.endDate || ev.endDate <= ev.date || out.length >= cap) return out;
+  const cursor = new Date(ev.date + "T00:00:00");
+  const end = new Date(ev.endDate + "T00:00:00");
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) return out;
+  while (out.length < cap) {
+    cursor.setDate(cursor.getDate() + 1);
+    if (cursor > end) break;
+    out.push(
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`
+    );
+  }
+  return out;
+}
+
+/** Link to the .ics export of the feed. With a week range: a fixed snapshot
+ *  (used by "Download .ics"). Without one: the rolling current-week feed the
+ *  server computes — that's what calendar subscriptions should use, so they
+ *  follow the calendar forward forever. */
+export function icsUrl(weekStart?: string, weekEnd?: string, download = false): string {
+  const q = new URLSearchParams();
+  if (weekStart && weekEnd) {
+    q.set("weekStart", weekStart);
+    q.set("weekEnd", weekEnd);
+  }
   if (download) q.set("download", "1");
-  return `/api/weekly-ics?${q.toString()}`;
+  const qs = q.toString();
+  return `/api/weekly-ics${qs ? `?${qs}` : ""}`;
 }
 
 /** Bookmarks live in their own localStorage key (not the synced profile blob):
@@ -126,13 +162,13 @@ export function getWeekRange(ref: Date = new Date()): { weekStart: string; weekE
   return { weekStart: iso(mon), weekEnd: iso(sun) };
 }
 
-function readCache(weekStart: string, weekEnd: string): TechEventsResult | null {
+function readCache(weekStart: string, weekEnd: string, allowStale = false): TechEventsResult | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { key: string; at: number; data: TechEventsResult };
     if (parsed.key !== `${weekStart}|${weekEnd}`) return null;
-    if (Date.now() - parsed.at > CACHE_TTL_MS) return null;
+    if (!allowStale && Date.now() - parsed.at > CACHE_TTL_MS) return null;
     return { ...parsed.data, source: "cache" };
   } catch {
     return null;
@@ -184,6 +220,13 @@ function toTechEventList(raw: unknown, weekStart: string, weekEnd: string): Tech
     });
 }
 
+/** Response guard: a non-2xx reply is a failed pull, never a legitimate
+ *  empty week — without this an error body used to get cached for 12h. */
+async function parseOk(r: Response): Promise<unknown> {
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
 export async function fetchTechEvents(force = false): Promise<TechEventsResult> {
   const { weekStart, weekEnd } = getWeekRange();
   if (!force) {
@@ -193,33 +236,32 @@ export async function fetchTechEvents(force = false): Promise<TechEventsResult> 
   // Direct (Kenya truth) + AI online fill race in parallel; either may fail
   // without killing the feed.
   const [directRes, aiRes] = await Promise.allSettled([
-    fetch(`/api/direct-events?weekStart=${weekStart}&weekEnd=${weekEnd}`).then((r) =>
-      r.json().catch(() => ({}))
-    ),
+    fetch(`/api/direct-events?weekStart=${weekStart}&weekEnd=${weekEnd}`).then(parseOk),
     fetch("/api/tech-events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ weekStart, weekEnd }),
-    }).then((r) => r.json().catch(() => ({}))),
+    }).then(parseOk),
   ]);
 
-  const directData = directRes.status === "fulfilled" ? directRes.value : {};
-  const aiData = aiRes.status === "fulfilled" ? aiRes.value : {};
+  const directOk = directRes.status === "fulfilled";
+  const directData = directOk ? (directRes.value as Record<string, unknown>) : {};
+  const aiData = aiRes.status === "fulfilled" ? (aiRes.value as Record<string, unknown>) : {};
 
-  const seen = new Set<string>();
-  const events: TechEvent[] = [];
-  for (const e of toTechEventList(directData.events, weekStart, weekEnd)) {
-    const k = eventKey(e);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    events.push(e);
-  }
+  // Cross-source merge with venue-token keying; direct first, AI subordinate
+  // (an AI item duplicating a direct listing on title+date is dropped).
+  const directDeduped = dedupeEvents(toTechEventList(directData.events, weekStart, weekEnd));
+  const events: TechEvent[] = directDeduped;
+  const seenVenueKey = new Set(directDeduped.map(dedupeEventKey));
+  const seenBareDirect = new Set(directDeduped.map(bareEventKey));
   let aiFill = 0;
   for (const e of toTechEventList(aiData.events, weekStart, weekEnd)) {
     if (aiFill >= MAX_AI_FILL) break;
-    const k = eventKey(e);
-    if (seen.has(k)) continue;
-    seen.add(k);
+    const vk = dedupeEventKey(e);
+    const bk = bareEventKey(e);
+    if (seenVenueKey.has(vk) || seenBareDirect.has(bk)) continue;
+    seenVenueKey.add(vk);
+    seenBareDirect.add(bk);
     events.push(e);
     aiFill += 1;
   }
@@ -228,17 +270,30 @@ export async function fetchTechEvents(force = false): Promise<TechEventsResult> 
   const result: TechEventsResult = {
     events,
     hubs: TECH_HUBS,
-    sources: Array.isArray(directData.sources) ? directData.sources : [],
+    sources: directOk && Array.isArray(directData.sources) ? (directData.sources as DirectSource[]) : [],
     aiFill,
-    source: "direct",
+    // "direct" only when the deterministic source actually answered; AI-only
+    // or dead-network pulls are "fallback", never mislabelled as direct.
+    source: directOk ? "direct" : "fallback",
     fetchedAt: new Date().toISOString(),
   };
-  recordSourceHealth(result.sources, result.fetchedAt);
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ key: `${weekStart}|${weekEnd}`, at: Date.now(), data: result }));
-  } catch {
-    /* storage full/blocked — caching is best-effort */
+
+  // Only a pull that actually reached the deterministic source may overwrite
+  // the cache and the health panel — a failed one must not blank the radar
+  // for the next 12h or wipe per-source history.
+  if (directOk) {
+    recordSourceHealth(result.sources, result.fetchedAt);
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ key: `${weekStart}|${weekEnd}`, at: Date.now(), data: result }));
+    } catch {
+      /* storage full/blocked — caching is best-effort */
+    }
+    return result;
   }
+
+  // Direct failed: serve the last good pull (even past its TTL) as stale.
+  const lastGood = readCache(weekStart, weekEnd, true);
+  if (lastGood) return { ...lastGood, stale: true };
   return result;
 }
 

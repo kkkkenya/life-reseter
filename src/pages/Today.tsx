@@ -4,13 +4,13 @@ import { useAppStore } from "@/store/useAppStore";
 import { IconFor } from "@/components/IconFor";
 import { useFeedback } from "@/hooks/useFeedback";
 import { programDayFromDate, dateFromProgramDay, formatShortDate } from "@/lib/planGenerator";
-import { detoxStreakDuration } from "@/lib/streaks";
 import { askGemini } from "@/lib/gemini";
 import { coachVoice } from "@/data/coachTones";
+import { getSweetGreeting } from "@/lib/sweetWords";
+import { detoxStreakDuration } from "@/lib/streaks";
 import { isSunday, isoWeekKey } from "@/lib/isoWeek";
 import { type SchedulableTask } from "@/lib/autoSchedule";
 import { Card, PrimaryButton } from "@/components/ui";
-import { getSweetGreeting } from "@/lib/sweetWords";
 import { addDaysISO, buildWeekPlan, WEEKDAY_SHORT } from "@/lib/school";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import type { GCalEvent } from "@/lib/googleCalendar";
@@ -28,13 +28,11 @@ import { dayCompletionInfo, computeDayStreak } from "@/lib/dayCompletion";
 import type { TimeOfDay, RecurrenceRule, TaskPriority, TaskDefinition } from "@/types";
 
 export default function Today({
-  onOpenExamen,
   onOpenStreaks,
-  onOpenDetox,
+  onOpenLife,
 }: {
-  onOpenExamen?: () => void;
   onOpenStreaks?: () => void;
-  onOpenDetox?: () => void;
+  onOpenLife?: () => void;
 }) {
   const profile = useAppStore((s) => s.profile);
   const completeTask = useAppStore((s) => s.completeTask);
@@ -346,7 +344,7 @@ export default function Today({
         </div>
       </div>
 
-      {profile.streaks.length > 0 && (
+      {(profile.streaks.length > 0 || profile.detoxHabits.length > 0) && (
         <button onClick={() => onOpenStreaks?.()} className="mt-4 flex w-full gap-2 overflow-x-auto">
           {profile.streaks.map((h) => {
             const days = Math.floor((Date.now() - new Date(h.startedAt).getTime()) / 86400000);
@@ -364,11 +362,6 @@ export default function Today({
               </span>
             );
           })}
-        </button>
-      )}
-
-      {profile.detoxHabits.length > 0 ? (
-        <button onClick={() => onOpenDetox?.()} className="mt-3 flex w-full gap-2 overflow-x-auto">
           {profile.detoxHabits.map((h) => {
             const dur = detoxStreakDuration(h.currentStreakStart);
             return (
@@ -385,14 +378,6 @@ export default function Today({
               </span>
             );
           })}
-        </button>
-      ) : (
-        <button
-          onClick={() => onOpenDetox?.()}
-          className="mt-3 flex w-full items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs"
-          style={{ borderColor: "var(--color-line)", background: "var(--color-surface)", color: "var(--color-ink-dim)" }}
-        >
-          <Plus size={12} /> Track a habit you're cutting down or quitting
         </button>
       )}
 
@@ -496,7 +481,7 @@ export default function Today({
                 gEventsOn(day.date).length === 0
             ) && (
               <p className="text-sm" style={{ color: "var(--color-ink-dim)" }}>
-                Clear week ahead. Add classes in Compass → School.
+                Clear week ahead. Import a timetable in Life → Settings.
               </p>
             )}
           </div>
@@ -505,12 +490,12 @@ export default function Today({
 
       {isViewingToday && !profile.journal[todayProgramDay] && (
         <button
-          onClick={() => onOpenExamen?.()}
+          onClick={() => onOpenLife?.()}
           className="mt-4 flex w-full items-center justify-between rounded-2xl border px-4 py-3"
           style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}
         >
           <span className="text-sm" style={{ color: "var(--color-ink-dim)" }}>
-            Haven't done today's Examen yet
+            Haven't journaled today yet
           </span>
           <span className="text-xs font-semibold" style={{ color: "var(--color-ember)" }}>
             Reflect →

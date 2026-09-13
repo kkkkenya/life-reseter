@@ -3,10 +3,10 @@ import { celebrateAt } from "@/store/useCelebrationStore";
 import { playComplete, playMilestone, playLevelUp, playTap, playSkip, playSoft } from "@/lib/sound";
 
 /**
- * Central place for "this felt good, tell the user" moments — pairs a synthesized
- * sound with a confetti burst anchored to the element that triggered it. Keeping
- * this in one hook means every page gets the same feel for free instead of each
- * page re-implementing its own celebration logic.
+ * Central place for "this felt good, tell the user" moments — a synthesized
+ * sound, nothing more. No confetti, no popups: the reward for finishing a task
+ * is the finished task. Keeping this in one hook means every page gets the
+ * same tactile feel for free.
  */
 export function useFeedback() {
   const complete = useCallback((el: Element | null) => {

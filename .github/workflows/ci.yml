@@ -1,0 +1,23 @@
+# Type-check, lint and test on every push/PR. The events scrapers live in
+# src/lib with pure parsers, so this suite is what notices a broken parser
+# before a deploy does.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npx oxlint
+      - run: npx vitest run

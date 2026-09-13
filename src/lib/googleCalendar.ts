@@ -66,19 +66,24 @@ export function isTokenLive(expiresAt: number, now: number = Date.now()): boolea
 export function buildEventInsert(input: {
   label: string;
   date: string; // YYYY-MM-DD
+  endDate?: string | null; // multi-day events end here (inclusive)
   startTime: string; // HH:MM
   endTime: string; // HH:MM
   location?: string;
   description?: string;
 }): GCalInsert {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Nairobi";
-  const end = input.endTime > input.startTime ? input.endTime : input.startTime;
+  const multiDay = Boolean(input.endDate && input.endDate > input.date);
+  const endDate = multiDay ? (input.endDate as string) : input.date;
+  // Same-day: clamp end to start (old behaviour). Multi-day: the end datetime
+  // is on the final day, so it is always after the start regardless of times.
+  const end = multiDay || input.endTime > input.startTime ? input.endTime : input.startTime;
   return {
     summary: input.label.slice(0, 200),
     ...(input.description ? { description: input.description.slice(0, 1000) } : {}),
     ...(input.location?.trim() ? { location: input.location.trim().slice(0, 200) } : {}),
     start: { dateTime: `${input.date}T${input.startTime}:00`, timeZone },
-    end: { dateTime: `${input.date}T${end}:00`, timeZone },
+    end: { dateTime: `${endDate}T${end}:00`, timeZone },
   };
 }
 

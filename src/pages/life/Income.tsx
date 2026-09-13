@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Card, PrimaryButton, GhostButton } from "@/components/ui";
 import { useAppStore } from "@/store/useAppStore";
-import { Trash2, Target, Pencil, TrendingUp, TrendingDown, X, Plus } from "lucide-react";
+import { Trash2, Target, Pencil, TrendingUp, TrendingDown, X, Plus, FileDown, Loader2, Check } from "lucide-react";
+import { splitMpesaTxs, type MpesaTx } from "@/lib/mpesa";
 
 function YearGoalCard() {
   const incomeGoal = useAppStore((s) => s.profile.incomeGoal);
@@ -105,6 +106,64 @@ export default function Income() {
   const [note, setNote] = useState("");
   const [editingCap, setEditingCap] = useState<string | null>(null);
   const [capDraft, setCapDraft] = useState("");
+
+  // M-PESA statement import: parse a PDF export, review, then pull the trigger.
+  const [importState, setImportState] = useState<"idle" | "parsing" | "review" | "done">("idle");
+  const [importError, setImportError] = useState<string | null>(null);
+  const [imported, setImported] = useState<{ income: number; expenses: number } | null>(null);
+  const [txs, setTxs] = useState<MpesaTx[]>([]);
+  const [skipped, setSkipped] = useState<Set<number>>(new Set());
+
+  async function handleStatement(file: File | undefined) {
+    if (!file) return;
+    setImportState("parsing");
+    setImportError(null);
+    setImported(null);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const parts = typeof reader.result === "string" ? reader.result.split(",") : [];
+          if (parts[1]) resolve(parts[1]);
+          else reject(new Error("Couldn't read that PDF."));
+        };
+        reader.onerror = () => reject(new Error("Couldn't read that PDF."));
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/import-mpesa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileBase64: base64 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Couldn't read that statement.");
+      const parsed: MpesaTx[] = data?.transactions ?? [];
+      if (parsed.length === 0) throw new Error("No transactions found in that statement.");
+      setTxs(parsed);
+      setSkipped(new Set());
+      setImportState("review");
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : "Import failed.");
+      setImportState("idle");
+    }
+  }
+
+  function commitImport() {
+    const chosen = txs.filter((_, i) => !skipped.has(i));
+    const { income, expenses } = splitMpesaTxs(chosen);
+    for (const t of income) addIncomeEntry("M-Pesa", t.amountKES, t.details.slice(0, 140), t.date);
+    for (const t of expenses) addExpenseCategory(t);
+    setImported({ income: income.length, expenses: expenses.length });
+    setImportState("done");
+    setTxs([]);
+    setSkipped(new Set());
+  }
+
+  function addExpenseCategory(t: MpesaTx) {
+    // Statements don't carry budget categories — land them in the first
+    // category so the money still shows up in the month view, editable after.
+    addExpenseEntry(expenseCategory, t.amountKES, t.details.slice(0, 140), t.date);
+  }
 
   const currentMonth = new Date().toISOString().slice(0, 7);
 
@@ -260,6 +319,86 @@ export default function Income() {
             );
           })}
         </div>
+      </Card>
+
+      <p className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
+        M-Pesa statement
+      </p>
+      <Card>
+        <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
+          Skip manual entry: upload the full statement PDF the M-PESA app emails you, review the parsed rows, then import. Income lands under a
+          "M-Pesa" venture; expenses under your selected category, with the real dates.
+        </p>
+        {importState === "idle" && (
+          <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed py-4 text-sm font-medium" style={{ borderColor: "var(--color-line)", color: "var(--color-ink-dim)" }}>
+            <FileDown size={16} /> Upload statement PDF
+            <input
+              type="file"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(e) => { void handleStatement(e.target.files?.[0]); e.target.value = ""; }}
+            />
+          </label>
+        )}
+        {importState === "parsing" && (
+          <p className="mt-3 flex items-center justify-center gap-2 py-3 text-sm" style={{ color: "var(--color-ink-dim)" }}>
+            <Loader2 size={15} className="animate-spin" /> Reading your statement…
+          </p>
+        )}
+        {importError && (
+          <p className="mt-2 text-xs" style={{ color: "var(--color-bad)" }}>{importError}</p>
+        )}
+        {importState === "review" && (
+          <div className="mt-3 space-y-1.5 border-t pt-3" style={{ borderColor: "var(--color-line)" }}>
+            <p className="text-xs" style={{ color: "var(--color-ink-dim)" }}>
+              {txs.length} transactions found. Uncheck anything you'd rather not import.
+            </p>
+            <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+              {txs.map((t, i) => (
+                <label key={t.receipt + i} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm" style={{ background: "var(--color-surface-raised)" }}>
+                  <input
+                    type="checkbox"
+                    checked={!skipped.has(i)}
+                    onChange={() =>
+                      setSkipped((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(i)) next.delete(i);
+                        else next.add(i);
+                        return next;
+                      })
+                    }
+                    className="accent-[var(--color-ember)]"
+                  />
+                  <span
+                    className="w-14 shrink-0 font-mono text-[11px] font-semibold"
+                    style={{ color: t.direction === "in" ? "var(--color-good)" : "var(--color-bad)" }}
+                  >
+                    {t.direction === "in" ? "+" : "-"}{t.amountKES.toLocaleString()}
+                  </span>
+                  <span className="w-20 shrink-0 font-mono text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
+                    {t.date.slice(5)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs" style={{ color: "var(--color-ink-dim)" }}>
+                    {t.details}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <PrimaryButton onClick={commitImport}>
+                <span className="flex items-center justify-center gap-1.5">
+                  <Check size={14} /> Import {txs.length - skipped.size}
+                </span>
+              </PrimaryButton>
+              <GhostButton onClick={() => { setImportState("idle"); setTxs([]); }}>Discard</GhostButton>
+            </div>
+          </div>
+        )}
+        {importState === "done" && imported && (
+          <p className="mt-3 flex items-center gap-1.5 text-sm" style={{ color: "var(--color-good)" }}>
+            <Check size={15} /> Imported {imported.income} income and {imported.expenses} expense entries with their real dates.
+          </p>
+        )}
       </Card>
 
       <div className="mt-6 flex gap-2">

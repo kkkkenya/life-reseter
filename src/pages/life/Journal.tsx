@@ -35,18 +35,50 @@ function mediaSummary(media?: JournalMediaRef[]): string | null {
 }
 import { askGemini, isGeminiConfigured } from "@/lib/gemini";
 import { coachVoice } from "@/data/coachTones";
+import { verseOfTheDay } from "@/data/gospel";
+import { GospelCard } from "@/pages/today/GospelCard";
 
 export default function Journal() {
   const profile = useAppStore((s) => s.profile);
   const saveJournalEntry = useAppStore((s) => s.saveJournalEntry);
+  const setDailyGospel = useAppStore((s) => s.setDailyGospel);
 
+  const todayIso = new Date().toISOString().slice(0, 10);
   const todayDay = profile.startDate
     ? programDayFromDate(profile.startDate, new Date().toISOString().slice(0, 10))
     : 1;
   const existing = profile.journal[todayDay];
+  const devotional = profile.devotional;
+  const firstName = profile.displayName.trim().split(/\s+/)[0] || "";
+
+  // Daily Gospel verse: generated once per day (with a one-shot AI reflection
+  // when configured), then stored — the same pipe the old Examen page ran.
+  const [verseReflecting, setVerseReflecting] = useState(false);
+  useEffect(() => {
+    if (!devotional.enabled) return;
+    if (profile.dailyGospel[todayIso]) return;
+    const verse = verseOfTheDay(new Date(), devotional.mode);
+    setDailyGospel(todayIso, verse.ref, verse.text);
+    if (isGeminiConfigured) {
+      setVerseReflecting(true);
+      askGemini(`Verse: "${verse.text}" (${verse.ref})`, {
+        systemInstruction:
+          `You are a Catholic reflection companion writing for ${firstName || "a friend"} working on becoming their best self. ` +
+          "In 2 sentences, tie this Gospel verse to daily discipline and self-mastery. Warm and direct, like a best friend who refuses to let them settle. Reverent, plain language, no cliches.",
+        temperature: 0.7,
+        maxOutputTokens: 120,
+      })
+        .then((text) => setDailyGospel(todayIso, verse.ref, verse.text, text))
+        .catch(() => {})
+        .finally(() => setVerseReflecting(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayIso, devotional.enabled, devotional.mode]);
 
   const [morningEnergy, setMorningEnergy] = useState(existing?.morningEnergy ?? 3);
   const [gratitude, setGratitude] = useState(existing?.gratitude ?? "");
+  const [sleepHours, setSleepHours] = useState<string>(existing?.sleepHours !== undefined ? String(existing.sleepHours) : "");
+  const [workoutMinutes, setWorkoutMinutes] = useState<string>(existing?.workoutMinutes !== undefined ? String(existing.workoutMinutes) : "");
   const [morningSaved, setMorningSaved] = useState(false);
 
   const [wentWell, setWentWell] = useState(existing?.wentWell ?? "");
@@ -128,7 +160,14 @@ export default function Journal() {
   const [reflectError, setReflectError] = useState<string | null>(null);
 
   function saveMorning() {
-    saveJournalEntry(todayDay, { morningEnergy, gratitude });
+    const sleep = Number(sleepHours);
+    const workout = Number(workoutMinutes);
+    saveJournalEntry(todayDay, {
+      morningEnergy,
+      gratitude,
+      sleepHours: sleepHours.trim() && Number.isFinite(sleep) ? Math.min(24, Math.max(0, sleep)) : undefined,
+      workoutMinutes: workoutMinutes.trim() && Number.isFinite(workout) ? Math.max(0, Math.round(workout)) : undefined,
+    });
     setMorningSaved(true);
     setTimeout(() => setMorningSaved(false), 1800);
   }
@@ -275,6 +314,9 @@ export default function Journal() {
 
   return (
     <div>
+      {devotional.enabled && profile.dailyGospel[todayIso] && (
+        <GospelCard gospel={profile.dailyGospel[todayIso]} reflecting={verseReflecting} />
+      )}
       <Card>
         <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
           Morning check-in
@@ -304,6 +346,36 @@ export default function Journal() {
             className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
             style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
           />
+        </div>
+        <div className="mt-3 flex gap-2">
+          <div className="flex-1">
+            <p className="mb-1.5 text-sm font-medium">Sleep last night (hours)</p>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={24}
+              step={0.5}
+              value={sleepHours}
+              onChange={(e) => setSleepHours(e.target.value)}
+              placeholder="7.5"
+              className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
+            />
+          </div>
+          <div className="flex-1">
+            <p className="mb-1.5 text-sm font-medium">Workout (minutes)</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={workoutMinutes}
+              onChange={(e) => setWorkoutMinutes(e.target.value)}
+              placeholder="0 = rest day"
+              className="w-full rounded-xl border px-3 py-2 text-sm outline-none"
+              style={{ borderColor: "var(--color-line)", background: "var(--color-surface-raised)", color: "var(--color-ink)" }}
+            />
+          </div>
         </div>
         <div className="mt-3">
           <PrimaryButton onClick={saveMorning}>

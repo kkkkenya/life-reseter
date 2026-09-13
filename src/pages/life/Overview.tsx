@@ -24,23 +24,21 @@ import {
   timeOfDayInsight,
   priorityRebalanceSuggestions,
   frequencyRebalanceSuggestions,
-  computeSeasonPacing,
 } from "@/lib/habitAnalytics";
 import { HeatmapCalendar } from "@/components/HeatmapCalendar";
 import { isGeminiConfigured, askGemini } from "@/lib/gemini";
 import { coachVoice } from "@/data/coachTones";
 import { isoWeekKey } from "@/lib/isoWeek";
 import { buildWeeklySummaryContext } from "@/lib/weeklyReport";
+import { buildBriefingPrompt, parseBriefing, ruleBasedBriefing } from "@/lib/briefing";
 import WeeklyReview, { shouldShowWeeklyReview } from "@/pages/life/WeeklyReview";
 import { OBSTACLE_OPTIONS, SEASON_OPTIONS, checkInInsights } from "@/lib/onboarding";
-import { buildBriefingPrompt, parseBriefing, ruleBasedBriefing } from "@/lib/briefing";
 
 export default function Overview() {
   const profile = useAppStore((s) => s.profile);
   const setWeeklyReport = useAppStore((s) => s.setWeeklyReport);
   const setTaskPriority = useAppStore((s) => s.setTaskPriority);
   const updateTaskFrequency = useAppStore((s) => s.updateTaskFrequency);
-  const setSeasonDuration = useAppStore((s) => s.setSeasonDuration);
   const setCorrelationSnapshot = useAppStore((s) => s.setCorrelationSnapshot);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
@@ -73,7 +71,6 @@ export default function Overview() {
   const todInsight = useMemo(() => timeOfDayInsight(profile), [profile]);
   const prioritySuggestions = useMemo(() => priorityRebalanceSuggestions(profile), [profile]);
   const frequencySuggestions = useMemo(() => frequencyRebalanceSuggestions(profile), [profile]);
-  const seasonPacing = useMemo(() => computeSeasonPacing(profile), [profile]);
   const topTaskHeatmap = useMemo(() => {
     if (profile.tasks.length === 0) return null;
     // pick the task with the most "done" entries as the representative habit to show
@@ -95,6 +92,7 @@ export default function Overview() {
 
   const weekKey = isoWeekKey();
   const cachedReport = profile.weeklyReports[weekKey];
+
 
   const cachedSnapshot = profile.correlationSnapshots[weekKey];
   // A fresh live compute each render — cheap (pure math over already-loaded data) — used both as
@@ -415,38 +413,6 @@ export default function Overview() {
       )}
 
       {shouldShowWeeklyReview(profile) && <WeeklyReview />}
-
-      {seasonPacing && (
-        <>
-          <p className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
-            Season pacing
-          </p>
-          <Card>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs leading-relaxed" style={{ color: "var(--color-ink-dim)" }}>
-                Season {profile.season.seasonNumber} is set to {profile.season.durationDays} days. At your recent{" "}
-                <span style={{ fontWeight: 600, color: "var(--color-ember)" }}>{Math.round(seasonPacing.rate * 100)}%</span>{" "}
-                completion rate, a{" "}
-                <span style={{ fontWeight: 600 }}>{seasonPacing.suggestedDurationDays}-day</span> season fits your actual pace better
-                {seasonPacing.pace === "ahead"
-                  ? " — you're moving faster than the current length assumes."
-                  : seasonPacing.pace === "behind"
-                  ? " — the current length is tighter than what you've been able to sustain."
-                  : " — close to where it already is."}
-              </p>
-              {seasonPacing.suggestedDurationDays !== profile.season.durationDays && (
-                <button
-                  onClick={() => setSeasonDuration(seasonPacing.suggestedDurationDays)}
-                  className="shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold"
-                  style={{ background: "var(--color-surface-raised)", color: "var(--color-ember)" }}
-                >
-                  → {seasonPacing.suggestedDurationDays}d
-                </button>
-              )}
-            </div>
-          </Card>
-        </>
-      )}
 
       <p className="mt-6 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
         Your 7 life areas

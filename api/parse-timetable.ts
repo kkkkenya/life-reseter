@@ -1,6 +1,8 @@
 // POST /api/parse-timetable — class timetable photo -> session list.
 // Same server-side key rules as api/parse-event.ts. The image is read once
 // and never stored. Returns every class row found (client reviews all).
+import { clientIp, rateLimit, sameOrigin } from "../src/lib/apiGuard";
+
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 
@@ -41,8 +43,16 @@ export default async function handler(req: any, res: any) {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
+  if (!sameOrigin(req)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   if (!API_KEY) {
     res.status(501).json({ error: "Gemini isn't configured on the server (GEMINI_API_KEY missing)." });
+    return;
+  }
+  if (!rateLimit(`tt:${clientIp(req)}`, 6, 60 * 60 * 1000)) {
+    res.status(429).json({ error: "Too many requests — try again in a bit." });
     return;
   }
   const { imageBase64, mimeType } = req.body ?? {};
@@ -68,10 +78,11 @@ export default async function handler(req: any, res: any) {
     `{"course":string,"weekday":0-6,"startTime":"HH:MM"|null,"endTime":"HH:MM"|null,"venue":string|null,"lecturer":string|null}`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+    // Key in the header, never the URL — keys in query strings leak into logs.
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
     const upstream = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": API_KEY },
       body: JSON.stringify({
         contents: [
           {

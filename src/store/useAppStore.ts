@@ -1,6 +1,8 @@
 import { create } from "zustand";
+import { isoWeekKey } from "@/lib/isoWeek";
 import { persist } from "zustand/middleware";
 import type {
+  CoachTone,
   DailyQuest,
   DayRecord,
   IncomeEntry,
@@ -13,9 +15,8 @@ import type {
   MitEntry,
   ObjectiveHorizon,
   PlannedTask,
+  QuestPillar,
   RecurrenceRule,
-  SleepLog,
-  StatKey,
   StreakHabit,
   DetoxHabit,
   DetoxHabitType,
@@ -25,19 +26,14 @@ import type {
   TimeBlock,
   TimeOfDay,
   UserProfile,
-  VentureLog,
-  QuestPillar,
   QuizAnswers,
   CheckInRecord,
   ClassSession,
   AssignmentDeadline,
   DevotionalSettings,
-  CoachTone,
   CorrelationSnapshotEntry,
 } from "@/types";
-import { isoWeekKey } from "@/lib/isoWeek";
 import { buildCalendar, distributeWeekdays, xpForTask, programDayFromDate } from "@/lib/planGenerator";
-import { RANK_TIERS } from "@/types";
 import { EMPTY_GOALS, emptyGoalTarget, getLifeArea, OBJECTIVE_HORIZONS } from "@/data/lifeAreas";
 import { STREAK_TEMPLATES } from "@/data/streakDefaults";
 import { evaluateMilestones } from "@/lib/milestones";
@@ -106,7 +102,7 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
   return {
     ...base,
     ...p,
-    tools: { ...base.tools, ...(p.tools ?? {}) },
+    pomodoroSessions: typeof p.pomodoroSessions === "number" ? p.pomodoroSessions : 0,
     goals: (() => {
       const merged = { ...EMPTY_GOALS };
       (Object.keys(EMPTY_GOALS) as LifeAreaKey[]).forEach((key) => {
@@ -156,8 +152,6 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
         }))
       : [],
     timeBlocks: p.timeBlocks ?? {},
-    ventureLogs: Array.isArray(p.ventureLogs) ? p.ventureLogs : [],
-    sleepLogs: Array.isArray(p.sleepLogs) ? p.sleepLogs : [],
     mitByDay: p.mitByDay ?? {},
     weeklyFocus: p.weeklyFocus ?? {},
     eveningPlanned: p.eveningPlanned ?? {},
@@ -165,9 +159,9 @@ function sanitizeProfile(base: UserProfile, p: Partial<UserProfile>): UserProfil
     skipReasons: p.skipReasons ?? {},
     dailyGospel: p.dailyGospel ?? {},
     dailyReview: p.dailyReview ?? {},
-    weeklyReports: p.weeklyReports ?? {},
     quests: p.quests ?? {},
     questReroll: p.questReroll ?? { weekKey: isoWeekKey(), usedThisWeek: 0, usedToday: {} },
+    weeklyReports: p.weeklyReports ?? {},
     incomeGoal: migrateIncomeGoal(p.incomeGoal),
     questPillars: p.questPillars && p.questPillars.length > 0 ? p.questPillars : DEFAULT_QUEST_PILLARS,
     devotional: p.devotional ?? DEFAULT_DEVOTIONAL,
@@ -182,16 +176,12 @@ const emptyProfile: UserProfile = {
   dream: "",
   aboutMe: "",
   quiz: null,
-  resetType: null,
-  stats: { wisdom: 42, confidence: 42, strength: 42, discipline: 42, focus: 42 },
-  vow: { antiVision: "", vowText: "", signedAt: null },
   tasks: [],
   startDate: null,
+  pomodoroSessions: 0,
   days: {},
   xpTotal: 0,
-  season: { seasonNumber: 1, startDate: todayIso(), durationDays: 24, xpThisSeason: 0 },
-  difficultyMultiplier: 1,
-  tools: { workoutLog: [], meditationMinutes: 0, pomodoroSessions: 0, bookProgress: {} },
+  vow: { antiVision: "", vowText: "", signedAt: null },
   streaks: [],
   detoxHabits: [],
   journal: {},
@@ -207,8 +197,6 @@ const emptyProfile: UserProfile = {
   classes: [],
   deadlines: [],
   timeBlocks: {},
-  ventureLogs: [],
-  sleepLogs: [],
   mitByDay: {},
   weeklyFocus: {},
   eveningPlanned: {},
@@ -254,8 +242,6 @@ interface AppState {
   removeTask: (uid: string) => void;
   updateTaskFrequency: (uid: string, freq: number) => void;
   startProgram: (startDateOverride?: string) => void;
-  setDifficulty: (mult: number) => void;
-  setSeasonDuration: (days: number) => void;
   setVowAntiVision: (text: string) => void;
   signVow: (vowText: string) => void;
   completeTask: (day: number, uid: string) => void;
@@ -263,10 +249,7 @@ interface AppState {
   regenerateCalendar: () => void;
   resetAll: () => void;
   markOnboarded: () => void;
-  logWorkoutSet: (label: string, sets: number, reps: number) => void;
-  addMeditationMinutes: (mins: number) => void;
   logPomodoroSession: () => void;
-  setBookProgress: (bookId: string, chapter: number) => void;
   seedStreaksFromQuiz: () => void;
   seedStreaksFromSelection: (templateValues: string[]) => void;
   addStreakHabit: (
@@ -286,9 +269,9 @@ interface AppState {
   removeDetoxHabit: (habitId: string) => void;
   logDetoxEntry: (habitId: string, clean: boolean, count?: number, note?: string) => void;
   saveJournalEntry: (day: number, entry: Partial<Omit<JournalEntry, "day" | "savedAt">>) => void;
-  addIncomeEntry: (venture: string, amountKES: number, note?: string) => void;
+  addIncomeEntry: (venture: string, amountKES: number, note?: string, date?: string) => void;
   removeIncomeEntry: (id: string) => void;
-  addExpenseEntry: (category: string, amountKES: number, note?: string) => void;
+  addExpenseEntry: (category: string, amountKES: number, note?: string, date?: string) => void;
   removeExpenseEntry: (id: string) => void;
   setBudgetCategory: (name: string, capKES: number) => void;
   setAboutMe: (text: string) => void;
@@ -321,19 +304,17 @@ interface AppState {
   setEveningPlanned: (dateKey: string, done: boolean) => void;
   /** Marks today's "all tasks done" popup as shown so it only fires once per calendar date. */
   markDayCompleteShown: (dateKey: string) => void;
-  addVentureLog: (venture: string, minutes: number) => void;
-  addSleepLog: (bedtime: string, waketime: string) => void;
   setMit: (day: number, entry: MitEntry) => void;
   toggleMitDone: (day: number) => void;
   setWeeklyFocus: (weekKey: string, text: string) => void;
   setDailyGospel: (dateKey: string, ref: string, text: string, reflection?: string) => void;
   setDailyReview: (dateKey: string, text: string) => void;
-  setWeeklyReport: (weekKey: string, text: string) => void;
   setQuestsForDay: (dateKey: string, quests: DailyQuest[]) => void;
   completeQuest: (dateKey: string, questId: string) => void;
   /** Applies a reroll: consumes one reroll credit (if available) and swaps in the replacement quest. Returns false if no credits remain. */
   rerollQuest: (dateKey: string, questId: string, replacement: DailyQuest) => boolean;
   rerollsRemaining: () => { thisWeek: number; today: number };
+  setWeeklyReport: (weekKey: string, text: string) => void;
   setIncomeGoal: (goal: IncomeGoal) => void;
   setQuestPillars: (pillars: QuestPillar[]) => void;
   setDevotionalSettings: (settings: DevotionalSettings) => void;
@@ -427,26 +408,6 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      startProgram: (startDateOverride) => {
-        const start = startDateOverride ?? todayIso();
-        set((s) => {
-          const days = buildCalendar(start, s.profile.tasks, {});
-          return {
-            profile: {
-              ...s.profile,
-              startDate: start,
-              days,
-              season: { ...s.profile.season, startDate: start },
-            },
-          };
-        });
-      },
-
-      setDifficulty: (mult) => set((s) => ({ profile: { ...s.profile, difficultyMultiplier: mult } })),
-
-      setSeasonDuration: (days) =>
-        set((s) => ({ profile: { ...s.profile, season: { ...s.profile.season, durationDays: days } } })),
-
       setVowAntiVision: (text) =>
         set((s) => ({ profile: { ...s.profile, vow: { ...s.profile.vow, antiVision: text } } })),
 
@@ -457,6 +418,20 @@ export const useAppStore = create<AppState>()(
             vow: { ...s.profile.vow, vowText, signedAt: new Date().toISOString() },
           },
         })),
+
+      startProgram: (startDateOverride) => {
+        const start = startDateOverride ?? todayIso();
+        set((s) => {
+          const days = buildCalendar(start, s.profile.tasks, {});
+          return {
+            profile: {
+              ...s.profile,
+              startDate: start,
+              days,
+            },
+          };
+        });
+      },
 
       completeTask: (day, uid) => {
         set((s) => {
@@ -475,7 +450,6 @@ export const useAppStore = create<AppState>()(
               ...s.profile,
               days: { ...s.profile.days, [day]: updatedRec },
               xpTotal: s.profile.xpTotal + xp,
-              season: { ...s.profile.season, xpThisSeason: s.profile.season.xpThisSeason + xp },
             },
           };
         });
@@ -505,49 +479,8 @@ export const useAppStore = create<AppState>()(
 
       markOnboarded: () => set((s) => ({ profile: { ...s.profile, onboarded: true } })),
 
-      logWorkoutSet: (label, sets, reps) => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            tools: {
-              ...s.profile.tools,
-              workoutLog: [
-                { id: `${Date.now()}`, date: todayIso(), label, sets, reps },
-                ...s.profile.tools.workoutLog,
-              ].slice(0, 50),
-            },
-          },
-        }));
-      },
-
-      addMeditationMinutes: (mins) => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            tools: { ...s.profile.tools, meditationMinutes: s.profile.tools.meditationMinutes + mins },
-          },
-        }));
-      },
-
       logPomodoroSession: () => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            tools: { ...s.profile.tools, pomodoroSessions: s.profile.tools.pomodoroSessions + 1 },
-          },
-        }));
-      },
-
-      setBookProgress: (bookId, chapter) => {
-        set((s) => ({
-          profile: {
-            ...s.profile,
-            tools: {
-              ...s.profile.tools,
-              bookProgress: { ...s.profile.tools.bookProgress, [bookId]: chapter },
-            },
-          },
-        }));
+        set((s) => ({ profile: { ...s.profile, pomodoroSessions: s.profile.pomodoroSessions + 1 } }));
       },
 
       seedStreaksFromQuiz: () => {
@@ -725,6 +658,8 @@ export const useAppStore = create<AppState>()(
             mood: entry.mood ?? existing?.mood ?? 5,
             morningEnergy: entry.morningEnergy ?? existing?.morningEnergy,
             gratitude: entry.gratitude ?? existing?.gratitude,
+            sleepHours: entry.sleepHours ?? existing?.sleepHours,
+            workoutMinutes: entry.workoutMinutes ?? existing?.workoutMinutes,
             examen: entry.examen ?? existing?.examen,
             media: entry.media ?? existing?.media ?? [],
             savedAt: nowIso(),
@@ -734,10 +669,10 @@ export const useAppStore = create<AppState>()(
         get().checkMilestones();
       },
 
-      addIncomeEntry: (venture, amountKES, note) => {
+      addIncomeEntry: (venture, amountKES, note, date) => {
         const entry: IncomeEntry = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          date: todayIso(),
+          date: date ?? todayIso(),
           venture,
           amountKES,
           note,
@@ -752,10 +687,10 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      addExpenseEntry: (category, amountKES, note) => {
+      addExpenseEntry: (category, amountKES, note, date) => {
         const entry: ExpenseEntry = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          date: todayIso(),
+          date: date ?? todayIso(),
           category,
           amountKES,
           note,
@@ -1027,31 +962,6 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      addVentureLog: (venture, minutes) => {
-        const entry: VentureLog = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          date: todayIso(),
-          venture,
-          minutes,
-        };
-        set((s) => ({ profile: { ...s.profile, ventureLogs: [entry, ...s.profile.ventureLogs].slice(0, 500) } }));
-      },
-
-      addSleepLog: (bedtime, waketime) => {
-        const [bh, bm] = bedtime.split(":").map(Number);
-        const [wh, wm] = waketime.split(":").map(Number);
-        let hours = wh + wm / 60 - (bh + bm / 60);
-        if (hours <= 0) hours += 24;
-        const entry: SleepLog = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          date: todayIso(),
-          bedtime,
-          waketime,
-          hours: Math.round(hours * 10) / 10,
-        };
-        set((s) => ({ profile: { ...s.profile, sleepLogs: [entry, ...s.profile.sleepLogs].slice(0, 200) } }));
-      },
-
       setMit: (day, entry) => {
         set((s) => ({ profile: { ...s.profile, mitByDay: { ...s.profile.mitByDay, [day]: entry } } }));
       },
@@ -1082,12 +992,12 @@ export const useAppStore = create<AppState>()(
         }));
       },
 
-      setDailyReview: (dateKey, text) => {
-        set((s) => ({ profile: { ...s.profile, dailyReview: { ...s.profile.dailyReview, [dateKey]: text } } }));
-      },
-
       setWeeklyReport: (weekKey, text) => {
         set((s) => ({ profile: { ...s.profile, weeklyReports: { ...s.profile.weeklyReports, [weekKey]: text } } }));
+      },
+
+      setDailyReview: (dateKey, text) => {
+        set((s) => ({ profile: { ...s.profile, dailyReview: { ...s.profile.dailyReview, [dateKey]: text } } }));
       },
 
       setQuestsForDay: (dateKey, quests) => {
@@ -1112,7 +1022,6 @@ export const useAppStore = create<AppState>()(
               quests: { ...s.profile.quests, [dateKey]: updated },
               days,
               xpTotal: s.profile.xpTotal + quest.xpBonus,
-              season: { ...s.profile.season, xpThisSeason: s.profile.season.xpThisSeason + quest.xpBonus },
             },
           };
         });
@@ -1195,24 +1104,8 @@ export const useAppStore = create<AppState>()(
   )
 );
 
-export function currentRankTier(xpThisSeason: number) {
-  let tier = RANK_TIERS[0];
-  for (const t of RANK_TIERS) {
-    if (xpThisSeason >= t.min) tier = t;
-  }
-  return tier;
-}
-
-export function nextRankTier(xpThisSeason: number) {
-  for (const t of RANK_TIERS) {
-    if (xpThisSeason < t.min) return t;
-  }
-  return null;
-}
-
 export function todayProgramDay(profile: UserProfile): number {
   if (!profile.startDate) return 1;
   return programDayFromDate(profile.startDate, new Date().toISOString().slice(0, 10));
 }
 
-export type { StatKey };
