@@ -11,6 +11,7 @@ const Setup = lazy(() => import("@/pages/Setup"));
 const SignIn = lazy(() => import("@/pages/SignIn"));
 const Today = lazy(() => import("@/pages/Today"));
 const Streaks = lazy(() => import("@/pages/Streaks"));
+const CalendarPage = lazy(() => import("@/pages/CalendarPage"));
 const Life = lazy(() => import("@/pages/Life"));
 const Events = lazy(() => import("@/pages/Events"));
 import { BottomNav, type Tab } from "@/components/BottomNav";
@@ -207,6 +208,7 @@ export default function App() {
       <div className="lg:pl-64">
         <Suspense fallback={<PageFallback />}>
           {tab === "today" && <Today onOpenStreaks={() => setStreaksOpen(true)} onOpenLife={() => setTab("life")} />}
+          {tab === "calendar" && <CalendarPage />}
           {tab === "life" && <Life />}
           {tab === "events" && <Events />}
           {streaksOpen && (
