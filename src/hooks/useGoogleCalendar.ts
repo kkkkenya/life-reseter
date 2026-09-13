@@ -116,6 +116,11 @@ export function useGoogleCalendar() {
 
   const list = useCallback(async (fromISO: string, toISO: string): Promise<GCalEvent[]> => {
     if (!sharedToken) throw new Error("Connect Google Calendar first.");
+    // A lapsed in-memory token would 401 mid-flight with an opaque Google
+    // error — fail fast with the actual remedy instead.
+    if (!isTokenLive(sharedExpiry)) {
+      throw new Error("Google session expired — reconnect via the GCal dot (top right).");
+    }
     const from = new Date(`${fromISO}T00:00:00`).toISOString();
     const to = new Date(`${toISO}T23:59:59`).toISOString();
     return listUpcomingEvents(sharedToken, from, to);
@@ -123,6 +128,9 @@ export function useGoogleCalendar() {
 
   const insert = useCallback(async (body: GCalInsert): Promise<GCalEvent> => {
     if (!sharedToken) throw new Error("Connect Google Calendar first.");
+    if (!isTokenLive(sharedExpiry)) {
+      throw new Error("Google session expired — reconnect via the GCal dot (top right).");
+    }
     return insertCalendarEvent(sharedToken, body);
   }, []);
 
