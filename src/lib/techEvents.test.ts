@@ -100,7 +100,7 @@ describe("normalizeEvent", () => {
 
 describe("eventKey + mapsLink + caps", () => {
   it("keys ignore title case", () => {
-    expect(eventKey({ title: "ABC", date: "2026-09-17" })).toBe(eventKey({ title: "abc", date: "2026-09-17" }));
+    expect(eventKey({ title: "ABC", date: "2026-09-17", venue: null })).toBe(eventKey({ title: "abc", date: "2026-09-17", venue: null }));
   });
   it("mapsLink skips online and venue-less events", () => {
     expect(mapsLink({ isOnline: true, city: "Nairobi", venue: "iHub" })).toBeNull();

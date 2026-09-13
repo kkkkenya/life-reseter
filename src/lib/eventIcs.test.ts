@@ -63,3 +63,34 @@ describe("nairobiWeek", () => {
     expect(new Date(`${weekStart}T00:00:00Z`).getUTCDay()).toBe(1);
   });
 });
+
+describe("UID stability", () => {
+  it("keeps the same UID when only the start time is refined", async () => {
+    const { buildIcs } = await import("./eventIcs");
+    const base = { weekStart: "2026-09-14", weekEnd: "2026-09-20" };
+    const mk = (startTime: string | null) => [
+      {
+        title: "Nairobi DevFest",
+        date: "2026-09-19",
+        endDate: null,
+        startTime,
+        endTime: null,
+        city: "Nairobi",
+        venue: "iHub",
+        isOnline: false,
+        url: "https://vabu.app/e/devfest",
+        image: null,
+        source: "Vabu",
+        origin: "vabu",
+        isFree: true,
+        priceText: null,
+        topics: [],
+      },
+    ];
+    const before = buildIcs(mk("09:00"), base);
+    const after = buildIcs(mk("10:30"), base);
+    const uid = (ics: string) => /UID:(.*)/.exec(ics)?.[1];
+    expect(uid(before)).toBeDefined();
+    expect(uid(before)).toBe(uid(after));
+  });
+});

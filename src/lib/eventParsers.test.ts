@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  bareEventKey,
+  dedupeEventKey,
+  dedupeEvents,
   inferTopics,
   inWeekISO,
   isoDateTimeToParts,
@@ -239,5 +242,67 @@ describe("parseIcsEvents", () => {
 
   it("ignores events with no title or start", () => {
     expect(parseIcsEvents("BEGIN:VEVENT\nSUMMARY:No date\nEND:VEVENT", "Feed")).toEqual([]);
+  });
+});
+
+describe("venue-token dedup", () => {
+  const ev = (over: { title: string; date: string; venue?: string | null; origin?: string | null; url?: string | null }) => ({
+    title: over.title,
+    date: over.date,
+    endDate: null,
+    startTime: "18:00",
+    endTime: "20:00",
+    city: null,
+    venue: over.venue ?? null,
+    isOnline: false,
+    url: over.url ?? null,
+    image: null,
+    source: null,
+    origin: over.origin ?? "vabu",
+    isFree: null,
+    priceText: null,
+    topics: [],
+  });
+
+  it("same title+venue merges across platforms", () => {
+    const merged = dedupeEvents([
+      ev({ title: "AI Saturday", date: "2026-09-19", venue: "iHub" }),
+      ev({ title: "AI Saturday", date: "2026-09-19", venue: "iHub, Nailab", origin: "luma" }),
+    ]);
+    expect(merged).toHaveLength(1);
+  });
+
+  it("same title, different venues stays separate", () => {
+    const merged = dedupeEvents([
+      ev({ title: "Tech Meetup", date: "2026-09-19", venue: "Westlands Hub" }),
+      ev({ title: "Tech Meetup", date: "2026-09-19", venue: "Kilimani Space" }),
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("venue-less rows only merge with other venue-less rows", () => {
+    const merged = dedupeEvents([
+      ev({ title: "Demo Day", date: "2026-09-19", venue: "iHub" }),
+      ev({ title: "Demo Day", date: "2026-09-19" }),
+      ev({ title: "Demo Day", date: "2026-09-19" }),
+    ]);
+    expect(merged).toHaveLength(2);
+  });
+
+  it("AI fill is subordinate to direct on title+date", () => {
+    const merged = dedupeEvents([
+      ev({ title: "AI Summit", date: "2026-09-19", venue: "KICC" }),
+      ev({ title: "AI Summit", date: "2026-09-19", venue: "KICC", origin: "ai" }),
+      ev({ title: "AI Summit", date: "2026-09-19", origin: "ai" }),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].origin).toBe("vabu");
+  });
+
+  it("keys ignore case and venue capitalization", () => {
+    expect(dedupeEventKey({ title: "ABC", date: "2026-09-17", venue: "iHub" })).toBe(
+      dedupeEventKey({ title: "abc", date: "2026-09-17", venue: "ihub, Nailab" })
+    );
+    expect(bareEventKey({ title: "X", date: "2026-09-17" })).toBe("x|2026-09-17");
   });
 });

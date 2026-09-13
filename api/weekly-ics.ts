@@ -7,7 +7,7 @@ import {
   collectAiEvents,
 } from "../src/lib/eventPipeline";
 import { buildIcs, nairobiWeek } from "../src/lib/eventIcs";
-import { overlapsWeek, type ParsedEvent } from "../src/lib/eventParsers";
+import { dedupeEvents, overlapsWeek, type ParsedEvent } from "../src/lib/eventParsers";
 
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
@@ -33,13 +33,7 @@ export default async function handler(req: any, res: any) {
       collectDirectEvents(weekStart, weekEnd),
       collectAiEvents(weekStart, weekEnd, API_KEY, MODEL),
     ]);
-    const seen = new Set<string>();
-    for (const e of [...direct.events, ...ai.events]) {
-      const key = `${e.title.toLowerCase()}|${e.date}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      events.push(e);
-    }
+    events = dedupeEvents([...direct.events, ...ai.events]);
     events = events
       .filter((e) => overlapsWeek(e, weekStart, weekEnd))
       .sort((a, b) => `${a.date} ${a.startTime ?? ""}`.localeCompare(`${b.date} ${b.startTime ?? ""}`))

@@ -1,4 +1,5 @@
 import { isValidIsoDate } from "./parseEvent";
+import { bareEventKey, dedupeEventKey, dedupeEvents } from "./eventParsers";
 import { recordSourceHealth } from "./eventHealth";
 
 export interface TechEvent {
@@ -60,8 +61,10 @@ export const MAX_EVENTS_PER_PULL = 20;
 
 const SAVED_KEY = "life-reset-saved-events";
 
-export function eventKey(ev: Pick<TechEvent, "title" | "date">): string {
-  return `${ev.title.toLowerCase()}|${ev.date}`;
+/** Identity used for React keys + saved-event bookmarks. Venue-token keying
+ *  keeps same-title lookalikes from colliding (see eventParsers.dedupeEventKey). */
+export function eventKey(ev: Pick<TechEvent, "title" | "date" | "venue">): string {
+  return dedupeEventKey(ev);
 }
 
 /** True when the event happens on `day` — including multi-day events, which
@@ -89,12 +92,19 @@ export function coveredDays(ev: Pick<TechEvent, "date" | "endDate">, cap = 3): s
   return out;
 }
 
-/** Link to the .ics export of this week's feed. `download` forces a file save
- *  instead of the browser handing it to the calendar app (webcal/import). */
-export function icsUrl(weekStart: string, weekEnd: string, download = false): string {
-  const q = new URLSearchParams({ weekStart, weekEnd });
+/** Link to the .ics export of the feed. With a week range: a fixed snapshot
+ *  (used by "Download .ics"). Without one: the rolling current-week feed the
+ *  server computes — that's what calendar subscriptions should use, so they
+ *  follow the calendar forward forever. */
+export function icsUrl(weekStart?: string, weekEnd?: string, download = false): string {
+  const q = new URLSearchParams();
+  if (weekStart && weekEnd) {
+    q.set("weekStart", weekStart);
+    q.set("weekEnd", weekEnd);
+  }
   if (download) q.set("download", "1");
-  return `/api/weekly-ics?${q.toString()}`;
+  const qs = q.toString();
+  return `/api/weekly-ics${qs ? `?${qs}` : ""}`;
 }
 
 /** Bookmarks live in their own localStorage key (not the synced profile blob):
@@ -238,20 +248,20 @@ export async function fetchTechEvents(force = false): Promise<TechEventsResult> 
   const directData = directOk ? (directRes.value as Record<string, unknown>) : {};
   const aiData = aiRes.status === "fulfilled" ? (aiRes.value as Record<string, unknown>) : {};
 
-  const seen = new Set<string>();
-  const events: TechEvent[] = [];
-  for (const e of toTechEventList(directData.events, weekStart, weekEnd)) {
-    const k = eventKey(e);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    events.push(e);
-  }
+  // Cross-source merge with venue-token keying; direct first, AI subordinate
+  // (an AI item duplicating a direct listing on title+date is dropped).
+  const directDeduped = dedupeEvents(toTechEventList(directData.events, weekStart, weekEnd));
+  const events: TechEvent[] = directDeduped;
+  const seenVenueKey = new Set(directDeduped.map(dedupeEventKey));
+  const seenBareDirect = new Set(directDeduped.map(bareEventKey));
   let aiFill = 0;
   for (const e of toTechEventList(aiData.events, weekStart, weekEnd)) {
     if (aiFill >= MAX_AI_FILL) break;
-    const k = eventKey(e);
-    if (seen.has(k)) continue;
-    seen.add(k);
+    const vk = dedupeEventKey(e);
+    const bk = bareEventKey(e);
+    if (seenVenueKey.has(vk) || seenBareDirect.has(bk)) continue;
+    seenVenueKey.add(vk);
+    seenBareDirect.add(bk);
     events.push(e);
     aiFill += 1;
   }

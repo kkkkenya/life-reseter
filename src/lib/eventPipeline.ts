@@ -9,6 +9,7 @@
 import { fetchSources, type EventSource } from "./eventSources";
 import {
   absUrl,
+  dedupeEvents,
   inWeekISO,
   MONTHS,
   overlapsWeek,
@@ -76,8 +77,22 @@ async function getText(url: string, timeoutMs: number): Promise<{ ok: boolean; b
   }
 }
 
-function eventKeyOf(e: Pick<ParsedEvent, "title" | "date">): string {
-  return `${e.title.toLowerCase()}|${e.date}`;
+/** Pick the year for a Vabu month/day so the date actually lands in the
+ *  target week — a "29 Dec" detail parsed during a January week belongs to
+ *  the previous year. Tries fallback, then the neighbors; falls back to the
+ *  original when nothing lands in-range. */
+export function pickDetailYear(
+  mon: number,
+  day: number,
+  weekStart: string,
+  weekEnd: string,
+  fallbackYear: number
+): number {
+  for (const y of [fallbackYear, fallbackYear - 1, fallbackYear + 1]) {
+    const iso = `${y}-${String(mon).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (iso >= weekStart && iso <= weekEnd) return y;
+  }
+  return fallbackYear;
 }
 
 function isCardInWeek(c: VabuCard, weekStart: string, weekEnd: string): boolean {
@@ -91,7 +106,7 @@ function isCardInWeek(c: VabuCard, weekStart: string, weekEnd: string): boolean 
 }
 
 /** Fetch a vabu detail page and turn one card into a fully-populated event. */
-async function fetchVabuDetail(card: VabuCard, fallbackYear: number): Promise<ParsedEvent | null> {
+async function fetchVabuDetail(card: VabuCard, weekStart: string, weekEnd: string): Promise<ParsedEvent | null> {
   const { ok, body: html } = await getText(card.url, 8000);
   if (!ok) return null;
   try {
@@ -106,7 +121,22 @@ async function fetchVabuDetail(card: VabuCard, fallbackYear: number): Promise<Pa
     let endDate: string | null = null;
     let startTime: string | null = null;
     let endTime: string | null = null;
-    const year = eventDate ? Number(eventDate[1]) : fallbackYear;
+    // eventDate carries an authoritative year when present; otherwise the
+    // listing month/day is anchored to whichever year lands in the target
+    // week (see pickDetailYear).
+    const fallbackYear = Number(weekStart.slice(0, 4));
+    const firstTime = times[0];
+    const year = eventDate
+      ? Number(eventDate[1])
+      : firstTime
+        ? pickDetailYear(
+            MONTHS[firstTime[2].toLowerCase().slice(0, 3)] ?? 1,
+            Number(firstTime[3]),
+            weekStart,
+            weekEnd,
+            fallbackYear
+          )
+        : fallbackYear;
     for (const m of times.slice(0, 2)) {
       const mon = MONTHS[m[2].toLowerCase().slice(0, 3)] ?? 1;
       const iso = `${year}-${String(mon).padStart(2, "0")}-${m[3].padStart(2, "0")}`;
@@ -177,14 +207,9 @@ async function eventsFromSource(
   if (!cfg) return [];
   switch (cfg.kind) {
     case "vabu-listing":
-      return fromVabuCards(parseVabuListing(body), weekStart, weekEnd, weekStart.slice(0, 4));
+      return fromVabuCards(parseVabuListing(body), weekStart, weekEnd);
     case "vabu-org":
-      return fromVabuCards(
-        parseVabuFanbase(body, source.name, cfg.engineering ?? false),
-        weekStart,
-        weekEnd,
-        weekStart.slice(0, 4)
-      );
+      return fromVabuCards(parseVabuFanbase(body, source.name, cfg.engineering ?? false), weekStart, weekEnd);
     case "luma":
       return parseLumaEvents(JSON.parse(body || "{}"), source.name);
     case "devpost":
@@ -201,10 +226,8 @@ async function eventsFromSource(
 async function fromVabuCards(
   cards: VabuCard[],
   weekStart: string,
-  weekEnd: string,
-  fallbackYearStr: string
+  weekEnd: string
 ): Promise<ParsedEvent[]> {
-  const fallbackYear = Number(fallbackYearStr);
   const seen = new Set<string>();
   const inWeek: VabuCard[] = [];
   for (const c of cards) {
@@ -214,7 +237,7 @@ async function fromVabuCards(
     inWeek.push(c);
     if (inWeek.length >= 12) break;
   }
-  const details = await Promise.allSettled(inWeek.map((c) => fetchVabuDetail(c, fallbackYear)));
+  const details = await Promise.allSettled(inWeek.map((c) => fetchVabuDetail(c, weekStart, weekEnd)));
   return details.flatMap((d) => (d.status === "fulfilled" && d.value ? [d.value] : []));
 }
 
@@ -234,29 +257,24 @@ export async function collectDirectEvents(weekStart: string, weekEnd: string): P
   );
 
   const status: SourceStatus[] = [];
-  const seen = new Set<string>();
-  const events: ParsedEvent[] = [];
+  const perSource: ParsedEvent[][] = [];
   settled.forEach((res, i) => {
     const src = sources[i];
     const value = res.status === "fulfilled" ? res.value : { ok: false, events: [] as ParsedEvent[] };
-    const inWeek = value.events
-      .filter((e) => overlapsWeek(e, weekStart, weekEnd))
-      .filter((e) => {
-        const k = eventKeyOf(e);
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
-    events.push(...inWeek);
+    perSource.push(value.events.filter((e) => overlapsWeek(e, weekStart, weekEnd)));
     status.push({
       id: src.id,
       label: src.name,
       url: src.homepage,
       ok: value.ok,
-      count: inWeek.length,
+      count: perSource[perSource.length - 1].length,
     });
   });
 
+  // Cross-source merge: venue-token keying + direct-wins-over-AI (see
+  // dedupeEvents in eventParsers). AI isn't in play here (direct only), so
+  // this is venue-aware first-wins.
+  const events = dedupeEvents(perSource.flat());
   events.sort((a, b) => `${a.date} ${a.startTime ?? ""}`.localeCompare(`${b.date} ${b.startTime ?? ""}`));
   return { events, sources: status };
 }
@@ -330,7 +348,7 @@ async function verifyUrl(url: string, timeoutMs = 3000): Promise<boolean> {
       return res.ok || (res.status >= 300 && res.status < 400);
     } catch {
       clearTimeout(timer);
-      return false;
+      continue; // a HEAD hiccup shouldn't veto the GET attempt
     }
   }
   return false;

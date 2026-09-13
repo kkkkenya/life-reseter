@@ -238,7 +238,9 @@ export default function Events() {
 
   const week = useMemo(() => getWeekRange(), []);
   const days = useMemo(() => weekDays(week.weekStart), [week.weekStart]);
-  const feedIcs = useMemo(() => icsUrl(week.weekStart, week.weekEnd), [week.weekStart, week.weekEnd]);
+  // Rolling feed: no week params, so the subscription follows the calendar
+  // forward forever instead of pinning the week it was created in.
+  const feedIcs = useMemo(() => icsUrl(), []);
   const feedDownload = useMemo(() => icsUrl(week.weekStart, week.weekEnd, true), [week.weekStart, week.weekEnd]);
 
   async function load(force = false) {
@@ -270,6 +272,8 @@ export default function Events() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [gcalNote, setGcalNote] = useState<string | null>(null);
+
   function addToCalendar(ev: TechEvent, el: Element | null) {
     const start = ev.startTime ?? "18:00";
     const [h, m] = start.split(":").map(Number);
@@ -300,7 +304,12 @@ export default function Events() {
             description: ev.url ?? undefined,
           })
         )
-        .catch(() => {});
+        .catch(() => {
+          // Never silently swallow: the event IS in the local schedule, but
+          // the user should know Google didn't get it.
+          setGcalNote(`"${ev.title.slice(0, 40)}" kept locally — Google Calendar add failed. Reconnect via the GCal dot.`);
+          window.setTimeout(() => setGcalNote(null), 6000);
+        });
     }
   }
 
@@ -501,6 +510,16 @@ export default function Events() {
               </button>
             )}
           </div>
+
+          {gcalNote && (
+            <p
+              className="mt-2.5 rounded-xl border px-3 py-2 text-xs font-medium"
+              style={{ borderColor: "var(--color-bad)", color: "var(--color-bad)", background: "var(--color-ember-soft)" }}
+              role="status"
+            >
+              {gcalNote}
+            </p>
+          )}
 
           {!loading && feedNote && (
             <p
