@@ -23,14 +23,6 @@ export interface GCalEvent {
   htmlLink?: string;
 }
 
-export interface GCalInsert {
-  summary: string;
-  description?: string;
-  location?: string;
-  start: { dateTime: string; timeZone: string };
-  end: { dateTime: string; timeZone: string };
-}
-
 let gisPromise: Promise<void> | null = null;
 
 export function loadGisScript(): Promise<void> {
@@ -62,31 +54,6 @@ export function isTokenLive(expiresAt: number, now: number = Date.now()): boolea
   return expiresAt - now > 60_000;
 }
 
-/** Our TimeBlock-ish shape -> Calendar API body. Pure, tested. */
-export function buildEventInsert(input: {
-  label: string;
-  date: string; // YYYY-MM-DD
-  endDate?: string | null; // multi-day events end here (inclusive)
-  startTime: string; // HH:MM
-  endTime: string; // HH:MM
-  location?: string;
-  description?: string;
-}): GCalInsert {
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Nairobi";
-  const multiDay = Boolean(input.endDate && input.endDate > input.date);
-  const endDate = multiDay ? (input.endDate as string) : input.date;
-  // Same-day: clamp end to start (old behaviour). Multi-day: the end datetime
-  // is on the final day, so it is always after the start regardless of times.
-  const end = multiDay || input.endTime > input.startTime ? input.endTime : input.startTime;
-  return {
-    summary: input.label.slice(0, 200),
-    ...(input.description ? { description: input.description.slice(0, 1000) } : {}),
-    ...(input.location?.trim() ? { location: input.location.trim().slice(0, 200) } : {}),
-    start: { dateTime: `${input.date}T${input.startTime}:00`, timeZone },
-    end: { dateTime: `${endDate}T${end}:00`, timeZone },
-  };
-}
-
 async function gcal<T>(token: string, path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
     ...init,
@@ -110,13 +77,6 @@ export async function listUpcomingEvents(token: string, timeMinISO: string, time
   });
   const data = await gcal<{ items?: GCalEvent[] }>(token, `/calendars/primary/events?${q}`);
   return Array.isArray(data.items) ? data.items : [];
-}
-
-export async function insertCalendarEvent(token: string, body: GCalInsert): Promise<GCalEvent> {
-  return gcal<GCalEvent>(token, "/calendars/primary/events", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
 }
 
 export function revokeToken(token: string): void {

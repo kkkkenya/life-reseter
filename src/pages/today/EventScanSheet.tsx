@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Loader2, Check, Pencil } from "lucide-react";
+import { useRef, useState } from "react";
+import { ImagePlus, Loader2, Check, Pencil, ExternalLink } from "lucide-react";
 import { GhostButton } from "@/components/ui";
 import { LIFE_AREAS } from "@/data/lifeAreas";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
-import { buildEventInsert } from "@/lib/googleCalendar";
+import { gcalEventUrl } from "@/lib/techEvents";
 import { isValidIsoDate, isValidTime, parseEventFromImage, type ParsedEvent } from "@/lib/parseEvent";
 import type { LifeAreaKey, TimeBlock } from "@/types";
 
@@ -48,14 +47,6 @@ export function EventScanSheet({
   const [location, setLocation] = useState("");
   const [manualMode, setManualMode] = useState(false);
 
-  const gcal = useGoogleCalendar();
-  const [toGoogle, setToGoogle] = useState(false);
-  const [gError, setGError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (gcal.connected) setToGoogle(true);
-  }, [gcal.connected]);
-
   async function handleFile(file: File | undefined) {
     if (!file) return;
     setScanError(null);
@@ -96,26 +87,27 @@ export function EventScanSheet({
     return { startTime: start, endTime: end, label: label.slice(0, 140), lifeArea: area };
   }
 
-  async function confirm() {
+  function confirm() {
     if (!valid) return;
-    setGError(null);
-    if (toGoogle && gcal.connected) {
-      try {
-        await gcal.insert(
-          buildEventInsert({
-            label: title.trim(),
-            date,
-            startTime: start,
-            endTime: end,
-            location: location.trim() || undefined,
-          })
-        );
-      } catch {
-        setGError("Google push failed — reconnect (green dot, top right) and retry, or keep it local only.");
-        return; // stay open so nothing is lost silently
-      }
-    }
     onConfirm(date, buildBlock());
+    // Zero-config Google add (the mesda.co.ke trick): open Google's prefilled
+    // event page — no OAuth, no API, works signed in anywhere.
+    window.open(
+      gcalEventUrl({
+        title: title.trim(),
+        date,
+        endDate: null,
+        startTime: start,
+        endTime: end,
+        venue: location.trim() || null,
+        city: null,
+        isOnline: false,
+        url: null,
+        source: null,
+      }),
+      "_blank",
+      "noopener"
+    );
   }
 
   return (
@@ -242,32 +234,19 @@ export function EventScanSheet({
               </GhostButton>
               <button
                 disabled={!valid}
-                onClick={() => void confirm()}
+                onClick={confirm}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-full py-3 text-sm font-semibold disabled:opacity-40"
                 style={{ background: "var(--color-ember)", color: "#fbf3e7" }}
               >
                 <Check size={14} /> Add to calendar
               </button>
             </div>
-            {gcal.connected && (
-              <label className="flex cursor-pointer items-center gap-2 text-xs" style={{ color: "var(--color-ink-dim)" }}>
-                <input
-                  type="checkbox"
-                  checked={toGoogle}
-                  onChange={(e) => setToGoogle(e.target.checked)}
-                  className="accent-[var(--color-ember)]"
-                />
-                Also add to Google Calendar
-              </label>
-            )}
-            {gError && (
-              <div className="rounded-xl px-3 py-2 text-xs" style={{ background: "var(--color-ember-soft)", color: "var(--color-ember)" }}>
-                <p>{gError}</p>
-                <button onClick={() => onConfirm(date, buildBlock())} className="mt-1 font-semibold underline underline-offset-2">
-                  Keep it local only →
-                </button>
-              </div>
-            )}
+            <p
+              className="flex items-center justify-center gap-1.5 text-center text-xs"
+              style={{ color: "var(--color-ink-faint)" }}
+            >
+              <ExternalLink size={12} /> Google Calendar opens prefilled — tap Save there too.
+            </p>
           </div>
         )}
       </div>

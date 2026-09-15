@@ -25,6 +25,7 @@ import {
   eventKey,
   fetchTechEvents,
   getWeekRange,
+  gcalEventUrl,
   icsUrl,
   loadSavedEvents,
   mapsLink,
@@ -33,8 +34,6 @@ import {
   toggleSavedEvent,
   type TechEvent,
 } from "@/lib/techEvents";
-import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
-import { buildEventInsert } from "@/lib/googleCalendar";
 
 type Mode = "all" | "kenya" | "online" | "saved";
 type Cost = "all" | "free" | "paid";
@@ -218,7 +217,6 @@ function EventCard({
 export default function Events() {
   const addTimeBlock = useAppStore((s) => s.addTimeBlock);
   const feedback = useFeedback();
-  const gcal = useGoogleCalendar();
   const [mode, setMode] = useState<Mode>("all");
   const [day, setDay] = useState<string>("all");
   const [city, setCity] = useState<string>("all");
@@ -272,8 +270,6 @@ export default function Events() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [gcalNote, setGcalNote] = useState<string | null>(null);
-
   function addToCalendar(ev: TechEvent, el: Element | null) {
     const start = ev.startTime ?? "18:00";
     const [h, m] = start.split(":").map(Number);
@@ -291,26 +287,9 @@ export default function Events() {
       });
     }
     feedback.complete(el);
-    if (gcal.connected) {
-      void gcal
-        .insert(
-          buildEventInsert({
-            label: ev.title,
-            date: ev.date,
-            endDate: ev.endDate,
-            startTime: start,
-            endTime: end,
-            location: ev.venue ?? ev.city ?? undefined,
-            description: ev.url ?? undefined,
-          })
-        )
-        .catch(() => {
-          // Never silently swallow: the event IS in the local schedule, but
-          // the user should know Google didn't get it.
-          setGcalNote(`"${ev.title.slice(0, 40)}" kept locally — Google Calendar add failed. Reconnect via the GCal dot.`);
-          window.setTimeout(() => setGcalNote(null), 6000);
-        });
-    }
+    // Zero-config Google add (the mesda.co.ke trick): open Google's prefilled
+    // event page — no OAuth, no API, works on any device with a browser.
+    window.open(gcalEventUrl(ev), "_blank", "noopener");
   }
 
   async function handleShare(ev: TechEvent) {
@@ -510,16 +489,6 @@ export default function Events() {
               </button>
             )}
           </div>
-
-          {gcalNote && (
-            <p
-              className="mt-2.5 rounded-xl border px-3 py-2 text-xs font-medium"
-              style={{ borderColor: "var(--color-bad)", color: "var(--color-bad)", background: "var(--color-ember-soft)" }}
-              role="status"
-            >
-              {gcalNote}
-            </p>
-          )}
 
           {!loading && feedNote && (
             <p

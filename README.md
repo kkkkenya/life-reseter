@@ -320,8 +320,8 @@ reference column). Nothing changes below `lg` — the phone layout is untouched.
 - **Adding a task** — weekly, biweekly, or monthly (specific day of month) frequency, a
   priority (P1/P2/P3), and a time-of-day bucket.
 - **Poster scan** — upload an event poster/screenshot and the schedule fields fill
-  themselves in (extracted once server-side, never stored). Add it locally, optionally
-  push to Google Calendar.
+  themselves in (extracted once server-side, never stored). Add it locally and Google
+  Calendar opens prefilled — a zero-config template link, no API, no sign-in.
 - **Streaks** — one page for everything you're *not* doing: avoidance streaks (sobriety,
   no PMO) with a live clock, relapse logging with pattern insights and milestone badges;
   task-linked positive streaks that auto-compute; and "cutting down" trackers (daily

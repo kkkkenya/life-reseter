@@ -2,14 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import {
   GOOGLE_CALENDAR_SCOPE,
   getClientId,
-  insertCalendarEvent,
   isGoogleConfigured,
   isTokenLive,
   listUpcomingEvents,
   loadGisScript,
   revokeToken,
   type GCalEvent,
-  type GCalInsert,
 } from "@/lib/googleCalendar";
 
 interface TokenClient {
@@ -126,13 +124,5 @@ export function useGoogleCalendar() {
     return listUpcomingEvents(sharedToken, from, to);
   }, []);
 
-  const insert = useCallback(async (body: GCalInsert): Promise<GCalEvent> => {
-    if (!sharedToken) throw new Error("Connect Google Calendar first.");
-    if (!isTokenLive(sharedExpiry)) {
-      throw new Error("Google session expired — reconnect via the GCal dot (top right).");
-    }
-    return insertCalendarEvent(sharedToken, body);
-  }, []);
-
-  return { configured: isGoogleConfigured, connected, busy, error, connect, disconnect, list, insert };
+  return { configured: isGoogleConfigured, connected, busy, error, connect, disconnect, list };
 }
