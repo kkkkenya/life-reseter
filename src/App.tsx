@@ -13,7 +13,6 @@ const Today = lazy(() => import("@/pages/Today"));
 const Streaks = lazy(() => import("@/pages/Streaks"));
 const CalendarPage = lazy(() => import("@/pages/CalendarPage"));
 const Life = lazy(() => import("@/pages/Life"));
-const Events = lazy(() => import("@/pages/Events"));
 import { BottomNav, type Tab } from "@/components/BottomNav";
 import { SideNav } from "@/components/SideNav";
 import { CelebrationLayer } from "@/components/CelebrationLayer";
@@ -210,7 +209,6 @@ export default function App() {
           {tab === "today" && <Today onOpenStreaks={() => setStreaksOpen(true)} onOpenLife={() => setTab("life")} />}
           {tab === "calendar" && <CalendarPage />}
           {tab === "life" && <Life />}
-          {tab === "events" && <Events />}
           {streaksOpen && (
             <div className="fixed inset-0 z-40" style={{ background: "var(--color-bg)" }}>
               <Streaks onBack={() => setStreaksOpen(false)} />

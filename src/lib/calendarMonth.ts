@@ -2,14 +2,14 @@
  * calendarMonth.ts — pure helpers for the built-in Calendar tab.
  *
  * The page stays thin: it gathers the raw pieces (time blocks, classes,
- * deadlines, tech events, GCal events) and hands each day's items here for
- * merging and ordering. No store, no network — directly unit-testable.
+ * deadlines, GCal events) and hands each day's items here for merging and
+ * ordering. No store, no network — directly unit-testable.
  */
 
 /** Weekday the app grid starts on: Monday, matching getWeekRange/isoWeek. */
 export const GRID_WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
-export type CalendarItemSource = "block" | "class" | "deadline" | "event" | "gcal";
+export type CalendarItemSource = "block" | "class" | "deadline" | "gcal";
 
 export interface CalendarItem {
   key: string;
@@ -40,7 +40,7 @@ export function monthGrid(year: number, month: number): { cells: (string | null)
   return { cells, rows };
 }
 
-/** Fetch window (direct-events is a week-oriented endpoint; months work as a range). */
+/** Fetch window for the visible month (used for the Google overlay). */
 export function monthRange(year: number, month: number): { startIso: string; endIso: string } {
   const startIso = `${year}-${String(month + 1).padStart(2, "0")}-01`;
   const endIso = `${year}-${String(month + 1).padStart(2, "0")}-${new Date(year, month + 1, 0).getDate()}`;

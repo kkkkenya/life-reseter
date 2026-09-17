@@ -57,10 +57,10 @@ describe("mergeCalendarDay", () => {
       { key: "b", source: "block", time: "14:00", label: "Study block" },
       { key: "d", source: "deadline", time: null, label: "Lab report", toggleable: true },
       { key: "c", source: "class", time: "09:00", label: "EMT 101" },
-      { key: "e", source: "event", time: null, label: "Hackathon (all day)" },
+      { key: "g", source: "gcal", time: null, label: "Hackathon (all day)" },
     ];
     const merged = mergeCalendarDay(items);
-    expect(merged.map((i) => i.key)).toEqual(["d", "e", "c", "b"]);
+    expect(merged.map((i) => i.key)).toEqual(["d", "g", "c", "b"]);
   });
 });
 

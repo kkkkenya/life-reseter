@@ -3,7 +3,6 @@ import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink, Plus } from "luc
 import { Card, PrimaryButton } from "@/components/ui";
 import { useAppStore } from "@/store/useAppStore";
 import { classesOn, weekdayOfISO } from "@/lib/school";
-import { eventCoversDay, eventKey, loadSavedEvents, type TechEvent } from "@/lib/techEvents";
 import { useGoogleCalendar } from "@/hooks/useGoogleCalendar";
 import type { GCalEvent } from "@/lib/googleCalendar";
 import {
@@ -27,15 +26,14 @@ const SOURCE_META: Record<CalendarItemSource, { label: string; color: string }> 
   block: { label: "Block", color: "var(--color-ember)" },
   class: { label: "Class", color: "#5cb8e8" },
   deadline: { label: "Deadline", color: "var(--color-bad)" },
-  event: { label: "Event", color: "var(--color-good)" },
   gcal: { label: "Google", color: "#9e5ce8" },
 };
 
 /**
  * Calendar — the whole picture on one grid. Everything the app knows about a
- * day (blocks, classes, deadlines, tech events, Google Calendar when
- * connected) merges into a month view with a per-day panel. Works fully
- * offline; Google is an optional overlay.
+ * day (blocks, classes, deadlines, Google Calendar when connected) merges
+ * into a month view with a per-day panel. Works fully offline; Google is an
+ * optional overlay.
  */
 export default function CalendarPage() {
   const profile = useAppStore((s) => s.profile);
@@ -51,36 +49,12 @@ export default function CalendarPage() {
   const now = new Date();
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [selectedIso, setSelectedIso] = useState(() => new Date().toISOString().slice(0, 10));
-  const [saved] = useState<TechEvent[]>(() => loadSavedEvents());
-  const [monthEvents, setMonthEvents] = useState<TechEvent[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(false);
   const [gEvents, setGEvents] = useState<GCalEvent[]>([]);
   const [blockTime, setBlockTime] = useState("18:00");
   const [blockLabel, setBlockLabel] = useState("");
 
   const range = useMemo(() => monthRange(cursor.year, cursor.month), [cursor]);
   const rangeKey = `${range.startIso}|${range.endIso}`;
-
-  // Tech events for the visible month: deterministic sources (edge-cached
-  // GET for the month range) plus this device's saved events.
-  useEffect(() => {
-    let cancelled = false;
-    setEventsLoading(true);
-    fetch(`/api/direct-events?weekStart=${range.startIso}&weekEnd=${range.endIso}`)
-      .then((r) => (r.ok ? r.json() : { events: [] }))
-      .then((data: { events?: TechEvent[] }) => {
-        if (!cancelled) setMonthEvents(Array.isArray(data.events) ? data.events : []);
-      })
-      .catch(() => {
-        if (!cancelled) setMonthEvents([]);
-      })
-      .finally(() => {
-        if (!cancelled) setEventsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [rangeKey, range.startIso, range.endIso]);
 
   // Google overlay: only when connected; a lapsed token just hides the layer.
   useEffect(() => {
@@ -103,8 +77,6 @@ export default function CalendarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gcal.connected, rangeKey]);
 
-  const allEvents = useMemo(() => [...monthEvents, ...saved], [monthEvents, saved]);
-
   // Which sources touch each visible day — drives the grid dots.
   const sourcesByDay = useMemo(() => {
     const map = new Map<string, Set<CalendarItemSource>>();
@@ -121,18 +93,12 @@ export default function CalendarPage() {
       if (classesOn(classes, weekdayOfISO(iso)).length > 0) touch(iso, "class");
       if (deadlines.some((d) => d.dueDate === iso && !d.done)) touch(iso, "deadline");
     }
-    for (const e of allEvents) {
-      const end = e.endDate && e.endDate > e.date ? e.endDate : e.date;
-      for (const iso of grid) {
-        if (iso && iso >= e.date && iso <= end) touch(iso, "event");
-      }
-    }
     for (const g of gEvents) {
       const iso = gcalDateOf(g);
       if (iso) touch(iso, "gcal");
     }
     return map;
-  }, [timeBlocks, classes, deadlines, allEvents, gEvents, cursor]);
+  }, [timeBlocks, classes, deadlines, gEvents, cursor]);
 
   const { cells } = monthGrid(cursor.year, cursor.month);
   const todayIso = new Date().toISOString().slice(0, 10);
@@ -179,18 +145,6 @@ export default function CalendarPage() {
         toggleable: true,
       });
     }
-    for (const e of allEvents) {
-      if (!eventCoversDay(e, selectedIso)) continue;
-      items.push({
-        key: eventKey(e),
-        source: "event",
-        time: e.startTime,
-        endTime: e.endTime,
-        label: e.title,
-        detail: [e.venue, e.city].filter(Boolean).join(" · ") || (e.isOnline ? "Online" : null),
-        href: e.url,
-      });
-    }
     for (const g of gEvents) {
       if (gcalDateOf(g) !== selectedIso) continue;
       items.push({
@@ -202,7 +156,7 @@ export default function CalendarPage() {
       });
     }
     return mergeCalendarDay(items);
-  }, [selectedIso, timeBlocks, classes, deadlines, allEvents, gEvents]);
+  }, [selectedIso, timeBlocks, classes, deadlines, gEvents]);
 
   function addBlock() {
     if (!blockLabel.trim()) return;
@@ -293,7 +247,7 @@ export default function CalendarPage() {
                   >
                     {Number(iso.slice(8, 10))}
                     <span className="flex h-1.5 items-center gap-0.5" aria-hidden="true">
-                      {(["block", "class", "deadline", "event", "gcal"] as CalendarItemSource[]).map((s) =>
+                      {(["block", "class", "deadline", "gcal"] as CalendarItemSource[]).map((s) =>
                         sources.has(s) ? (
                           <span key={s} className="h-1.5 w-1.5 rounded-full" style={{ background: SOURCE_META[s].color }} />
                         ) : null
@@ -444,12 +398,6 @@ export default function CalendarPage() {
                 </span>
               </PrimaryButton>
             </div>
-
-            {eventsLoading && (
-              <p className="mt-3 text-[11px]" style={{ color: "var(--color-ink-faint)" }}>
-                Refreshing tech events for this month…
-              </p>
-            )}
           </Card>
         </aside>
       </div>

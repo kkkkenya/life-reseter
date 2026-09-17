@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { ImagePlus, Loader2, Check, Pencil, ExternalLink } from "lucide-react";
 import { GhostButton } from "@/components/ui";
 import { LIFE_AREAS } from "@/data/lifeAreas";
-import { gcalEventUrl } from "@/lib/techEvents";
+import { gcalEventUrl } from "@/lib/gcalLink";
 import { isValidIsoDate, isValidTime, parseEventFromImage, type ParsedEvent } from "@/lib/parseEvent";
 import type { LifeAreaKey, TimeBlock } from "@/types";
 

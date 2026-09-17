@@ -97,6 +97,39 @@ function QuestCard({
   );
 }
 
+/** The open-moment quiet line: the day's first pending quest as a single
+ *  tappable line under the MIT hero. Tap = complete. The full board stays
+ *  below the fold — this is a glance, not a section. */
+export function TopQuestLine({ dateKey }: { dateKey: string }) {
+  const quests = useAppStore((s) => s.profile.quests[dateKey]);
+  const questPillars = useAppStore((s) => s.profile.questPillars);
+  const completeQuest = useAppStore((s) => s.completeQuest);
+  const feedback = useFeedback();
+  const quest = quests?.find((q) => q.status === "pending");
+  if (!quest) return null;
+  const pillar = pillarFor(questPillars, quest.focus);
+  return (
+    <button
+      onClick={(e) => {
+        completeQuest(dateKey, quest.id);
+        feedback.milestone(e.currentTarget);
+      }}
+      className="mt-3 flex w-full items-center justify-between rounded-full border px-4 py-2.5 text-left"
+      style={{ borderColor: "var(--color-line)", background: "var(--color-surface)" }}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <IconFor name={pillar.icon} size={13} color={pillar.color} fallback="Swords" />
+        <span className="truncate text-sm" style={{ color: "var(--color-ink-dim)" }}>
+          {quest.title}
+        </span>
+      </span>
+      <span className="ml-3 shrink-0 font-mono text-[11px] font-semibold" style={{ color: pillar.color }}>
+        +{quest.xpBonus} XP
+      </span>
+    </button>
+  );
+}
+
 export function QuestBoard({ dateKey, isToday }: { dateKey: string; isToday: boolean }) {
   const quests = useAppStore((s) => s.profile.quests[dateKey]);
   const incomeGoal = useAppStore((s) => s.profile.incomeGoal);

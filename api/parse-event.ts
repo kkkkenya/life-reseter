@@ -3,8 +3,25 @@
 // prefix) is only readable here via process.env, same rule as api/gemini.ts.
 // The uploaded image is forwarded to Gemini for one-shot extraction and is
 // never stored — see README "Event scanning" section.
-import { asDate, asTime, stripFences } from "../src/lib/eventPipeline";
 import { clientIp, rateLimit, sameOrigin } from "../src/lib/apiGuard";
+
+// Small validators shared with the Gemini JSON reply (inlined — the events
+// pipeline they used to live in was removed with the discovery feed).
+function stripFences(s: string): string {
+  const t = s.trim();
+  if (!t.startsWith("```")) return t;
+  return t.replace(/^```[a-zA-Z]*\s*/, "").replace(/\s*```\s*$/, "").trim();
+}
+function asDate(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
+}
+function asTime(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim().slice(0, 5);
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(t) ? t : null;
+}
 
 const API_KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";

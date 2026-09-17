@@ -19,7 +19,7 @@ import { AddTaskSheet } from "@/pages/today/AddTaskSheet";
 import { MitPickerSheet } from "@/pages/today/MitPickerSheet";
 import { ScheduleView, type RolloverCandidate } from "@/pages/today/ScheduleView";
 import { EventScanSheet } from "@/pages/today/EventScanSheet";
-import { QuestBoard } from "@/pages/today/QuestBoard";
+import { QuestBoard, TopQuestLine } from "@/pages/today/QuestBoard";
 import { DailyReviewCard } from "@/pages/today/DailyReviewCard";
 import { EveningPlanningCard } from "@/pages/today/EveningPlanningCard";
 import { DayCompleteModal } from "@/components/DayCompleteModal";
@@ -231,8 +231,6 @@ export default function Today({
         </div>
       </div>
 
-      {isViewingToday && <QuestBoard dateKey={todayIso} isToday />}
-
       {showSundayRitual && (
         <Card className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ember)" }}>
@@ -265,40 +263,60 @@ export default function Today({
       )}
 
       {mit ? (
+        // The open-moment hero: one card, one decision. Everything else on the
+        // page sits one pull below — this is the only thing that asks for a tap.
         <button
-          className="mt-4 w-full rounded-2xl border-2 p-4 text-left"
+          className="mt-5 block w-full rounded-3xl border-2 p-6 text-left transition-transform active:scale-[0.985]"
           style={{ borderColor: "var(--color-ember)", background: "var(--color-ember-soft)" }}
           onClick={(e) => {
-            if (!mit.taskUid) return;
+            if (!mit.taskUid || mitDone) return;
             completeTask(viewDay, mit.taskUid);
             feedback.complete(e.currentTarget);
           }}
         >
-          <div className="flex items-center justify-between">
+          <span className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ember)" }}>
-              <Star size={13} fill="var(--color-ember)" /> Most important task
+              <Star size={13} fill="var(--color-ember)" /> The one thing today
             </span>
-            {mitDone && <Check size={16} color="var(--color-good)" />}
-          </div>
-          <p className="mt-1.5 text-sm font-semibold" style={{ textDecoration: mitDone ? "line-through" : "none" }}>
+            {mitDone && <Check size={18} color="var(--color-good)" />}
+          </span>
+          <span
+            className="mt-3 block font-display text-[22px] font-semibold leading-snug"
+            style={{ textDecoration: mitDone ? "line-through" : "none", opacity: mitDone ? 0.7 : 1 }}
+          >
             {mit.label}
-          </p>
+          </span>
+          <span
+            className="mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold"
+            style={{ background: mitDone ? "var(--color-good)" : "var(--color-ember)", color: "#fbf3e7" }}
+          >
+            {mitDone ? "Closed out — day won" : "Tap to close it out"}
+          </span>
         </button>
       ) : (
         isViewingToday &&
         entries.length > 0 && (
           <button
             onClick={() => setMitPicking(true)}
-            className="mt-4 flex w-full items-center justify-between rounded-2xl border border-dashed px-4 py-3"
+            className="mt-5 flex w-full flex-col gap-1.5 rounded-3xl border-2 border-dashed p-6 text-left"
             style={{ borderColor: "var(--color-line)" }}
           >
-            <span className="text-sm" style={{ color: "var(--color-ink-dim)" }}>
-              Pick today's one most important task
+            <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-ink-dim)" }}>
+              <Star size={13} /> The one thing today
             </span>
-            <Star size={15} color="var(--color-ink-faint)" />
+            <span className="font-display text-[22px] font-semibold leading-snug" style={{ color: "var(--color-ink-dim)" }}>
+              Pick your most important task
+            </span>
+            <span className="text-sm" style={{ color: "var(--color-ink-faint)" }}>
+              One decision now makes the rest of the day obvious.
+            </span>
           </button>
         )
       )}
+
+      {/* The quiet second thing: first pending quest as one line — the full
+          board lives below the fold. */}
+      {isViewingToday && <TopQuestLine dateKey={todayIso} />}
 
       <div className="mt-4 flex items-center justify-between">
         <div className="flex gap-4 text-xs" style={{ color: "var(--color-ink-dim)" }}>
@@ -505,6 +523,8 @@ export default function Today({
         />
       )}
 
+      {/* One pull below: the working surface, then the full quest board and
+          everything secondary. The open moment above stays quiet. */}
       {view === "list" && (
         <div className="mt-6 space-y-3">
           <TaskList
@@ -560,6 +580,8 @@ export default function Today({
           />
         </div>
       )}
+
+      {isViewingToday && <QuestBoard dateKey={todayIso} isToday />}
 
       {addOpen && (
         <AddTaskSheet existingTasks={profile.tasks} onClose={() => setAddOpen(false)} onConfirm={confirmAddTask} />
